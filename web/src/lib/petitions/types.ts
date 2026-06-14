@@ -69,4 +69,5 @@ export type PetitionStore = {
     petitionId: string,
     input: UpsertCommitmentInput,
   ): Promise<PetitionDetail | null>;
+  markExecuted(id: string): Promise<void>;
 };

@@ -48,6 +48,7 @@ One commit per sub-task; `npm run typecheck` + browser smoke before each commit.
 - **Cron sweep (safety net):** `GET /api/cron/sweep` on a **Vercel Cron** every minute (Pro) — re-checks all open petitions and executes any crossed, covering **price-driven** crossings the reactive path misses.
 - **Idempotency:** a DB status lock (`executing`) + the contract's single-exec guard so reactive + cron can't double-fire.
 - Keep `POST /api/petitions/:id/execute` as a manual demo fallback. Executor private key only in Vercel env.
+- **Status (implemented):** shared `lib/executor/execute.ts` (`maybeExecutePetition` + `runSweep`), reactive `after()` trigger in the commitments confirm route, `GET /api/cron/sweep` (+ `vercel.json` minute cron, `CRON_SECRET`-gated), manual `POST /api/petitions/[id]/execute`, server-only `EXECUTOR_PRIVATE_KEY` signer. Idempotency = in-process lock + contract single-exec guard. **Open gap:** the Uniswap Swap-API calldata path is scaffolded but disabled (`buildBalancingSwapCalls` returns `[]`; contract mints at the Chainlink ratio), so the Uniswap API key is not yet exercised in the execute path — finish before relying on it for the Uniswap track.
 
 ### F7 — Frontend screens
 1. **List** — petitions with target, progress, status.

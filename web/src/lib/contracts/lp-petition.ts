@@ -43,6 +43,30 @@ export const lpPetitionAbi = [
     ],
   },
   {
+    type: "function",
+    name: "hypotheticalTvlUsdE18",
+    stateMutability: "view",
+    inputs: [{ name: "id", type: "uint256" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "isThresholdMet",
+    stateMutability: "view",
+    inputs: [{ name: "id", type: "uint256" }],
+    outputs: [{ name: "", type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "execute",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "id", type: "uint256" },
+      { name: "calls", type: "bytes[]" },
+    ],
+    outputs: [],
+  },
+  {
     type: "event",
     name: "Signed",
     inputs: [
@@ -50,6 +74,24 @@ export const lpPetitionAbi = [
       { name: "signer", type: "address", indexed: true },
       { name: "amount0", type: "uint256", indexed: false },
       { name: "amount1", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "Executed",
+    inputs: [
+      { name: "id", type: "uint256", indexed: true },
+      { name: "totalUsdE18", type: "uint256", indexed: false },
+      { name: "poolId", type: "bytes32", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "PositionMinted",
+    inputs: [
+      { name: "id", type: "uint256", indexed: true },
+      { name: "signer", type: "address", indexed: true },
+      { name: "positionTokenId", type: "uint256", indexed: false },
     ],
   },
 ] as const;

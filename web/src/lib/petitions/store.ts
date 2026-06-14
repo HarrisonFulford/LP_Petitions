@@ -188,6 +188,13 @@ const memoryStore: PetitionStore = {
 
     return memoryStore.getPetition(petitionId);
   },
+
+  async markExecuted(id) {
+    const state = getMemoryState();
+    const petition = state.petitions.get(id);
+    if (!petition) return;
+    state.petitions.set(id, { ...petition, status: "executed", updatedAt: nowIso() });
+  },
 };
 
 function hasDatabaseUrl() {
@@ -365,6 +372,14 @@ const postgresStore: PetitionStore = {
     }
 
     return postgresStore.getPetition(petitionId);
+  },
+
+  async markExecuted(id: string) {
+    await ensureSchema();
+    await getPool().query(
+      "UPDATE lp_petitions SET status = 'executed', updated_at = NOW() WHERE id = $1",
+      [id],
+    );
   },
 };
 

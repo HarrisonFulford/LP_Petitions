@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 
+import { maybeExecutePetition } from "@/lib/executor/execute";
 import { handleRouteError, jsonError, readJson } from "@/lib/petitions/http";
 import { verifySignedEvent } from "@/lib/petitions/onchain";
 import { getPetitionStore } from "@/lib/petitions/store";
@@ -36,6 +37,18 @@ export async function POST(request: Request, context: RouteContext) {
     });
 
     if (!detail) return jsonError(404, "Petition not found");
+
+    // Reactive auto-execute: try immediately after storing, in the background, so the
+    // HTTP response returns fast while the tx (if threshold crossed) sends. The cron
+    // sweep is the safety net; the contract single-exec guard prevents double-mint.
+    after(async () => {
+      try {
+        await maybeExecutePetition(detail);
+      } catch {
+        // Best-effort; the cron sweep will retry.
+      }
+    });
+
     return NextResponse.json({ ...detail, verification });
   } catch (error) {
     return handleRouteError(error);
