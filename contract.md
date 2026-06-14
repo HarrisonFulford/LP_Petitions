@@ -45,8 +45,12 @@ One commit per sub-task; `forge test` green before each commit.
 ### C5 — Uniswap v4 execute (mint to signers) — DONE
 - **Contract-native mint (revised from "guarded calldata exec").** Because `execute` is permissionless, running caller-supplied mint calldata against the funded contract is exploitable, so the contract builds the pool + per-signer mints itself: set initial price from the Chainlink-derived ratio; create pool if absent; mint **full-range position per signer, `owner = signer`**. No caller-calldata trust.
 - **`calls[]` = optional Uniswap Swap-API (UniversalRouter) calldata** for the pre-mint balancing swap, bounded by a Chainlink value-conservation guard (`maxSwapSlippageBps`). Empty `calls` = skip (common case). This is the Uniswap-API-in-core-path integration; Ian's F6 supplies this calldata.
-- **Deployed-PM note:** Base Sepolia PositionManager uses legacy action numbering (`SETTLE_PAIR = 0x11`, not `0x0d`); hardcoded to match.
+- **v4 addresses:** `LPPetition` references the `BaseSepolia` library (single source of truth) for Permit2/PositionManager/UniversalRouter, so they can't drift from the deploy script / app config. Uses standard v4-periphery `Actions` (`SETTLE_PAIR = 0x0d`) against the canonical Base Sepolia PositionManager (`0x4B2C77d2…`).
 - Fork tests (live Base Sepolia): pool created; each position owned by its signer; insolvent skipped; single-exec guard.
+
+### C6 — Deploy scripts — DONE
+- `script/Deploy.s.sol`: deploys `MockSPCX` + mock SPCX/USD aggregator (seed $150) + `LPPetition`; registers both feeds (WETH→real ETH/USD, SPCX→mock, 24h staleness); opens a demo petition (fee 3000, $5k threshold); mints 1,000 SPCX to the deployer + optional `DEMO_WALLETS`; prints an address book and writes `deployments/base-sepolia.json` for Ian. WETH is real (not minted) — wallets wrap testnet ETH via the faucet.
+- Run: `forge script script/Deploy.s.sol:Deploy --rpc-url $BASE_SEPOLIA_RPC_URL --broadcast` with `PRIVATE_KEY` set. Validated via simulation (dry-run).
 
 ### C6 — Deploy scripts
 - `forge script` deploy + mint; broadcast to Base Sepolia; output an address book for Ian.
