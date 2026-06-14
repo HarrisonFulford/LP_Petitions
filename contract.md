@@ -42,9 +42,11 @@ One commit per sub-task; `forge test` green before each commit.
 - Batch `transferFrom` via Permit2; skip signers with insufficient balance/allowance; recompute TVL from the deliverable set.
 - Tests: full pull; insolvent skipped; revert if deliverable TVL < threshold.
 
-### C5 — Uniswap v4 execute (mint to signers)
-- `execute(id, calls[])`: guarded calldata exec (whitelist Permit2 / UniversalRouter / PositionManager); set initial price from Chainlink-derived ratio; create pool if absent; mint **full-range position per signer, `owner = signer`**.
-- Fork tests: pool created; each position owned by its signer; events emitted.
+### C5 — Uniswap v4 execute (mint to signers) — DONE
+- **Contract-native mint (revised from "guarded calldata exec").** Because `execute` is permissionless, running caller-supplied mint calldata against the funded contract is exploitable, so the contract builds the pool + per-signer mints itself: set initial price from the Chainlink-derived ratio; create pool if absent; mint **full-range position per signer, `owner = signer`**. No caller-calldata trust.
+- **`calls[]` = optional Uniswap Swap-API (UniversalRouter) calldata** for the pre-mint balancing swap, bounded by a Chainlink value-conservation guard (`maxSwapSlippageBps`). Empty `calls` = skip (common case). This is the Uniswap-API-in-core-path integration; Ian's F6 supplies this calldata.
+- **Deployed-PM note:** Base Sepolia PositionManager uses legacy action numbering (`SETTLE_PAIR = 0x11`, not `0x0d`); hardcoded to match.
+- Fork tests (live Base Sepolia): pool created; each position owned by its signer; insolvent skipped; single-exec guard.
 
 ### C6 — Deploy scripts
 - `forge script` deploy + mint; broadcast to Base Sepolia; output an address book for Ian.

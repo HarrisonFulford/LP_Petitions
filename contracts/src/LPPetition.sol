@@ -4,22 +4,34 @@ pragma solidity ^0.8.26;
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {IAllowanceTransfer} from "permit2/src/interfaces/IAllowanceTransfer.sol";
+import {IPositionManager} from "@uniswap/v4-periphery/src/interfaces/IPositionManager.sol";
+import {LiquidityAmounts} from "@uniswap/v4-periphery/src/libraries/LiquidityAmounts.sol";
+import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
+import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
+import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
+import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
+import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 
 /// @title LPPetition
 /// @notice Threshold-based liquidity commitments. Users sign conditional LP
 ///         commitments for a sorted token pair; once the aggregate hypothetical
 ///         TVL (Chainlink-priced) clears a shared threshold, `execute()` pulls
 ///         tokens and mints full-range Uniswap v4 positions owned by each signer.
-/// @dev C4 scope: permissionless, single-exec `execute()` that values the
-///      deliverable set with the on-chain Chainlink read, skips insolvent signers,
-///      gates on the shared threshold, then pulls committed tokens via Permit2.
-///      The v4 pool-create + mint-to-signers step (consuming `calls`) lands in C5;
-///      until then pulled tokens are held by this contract.
+/// @dev Permissionless, single-exec `execute()`: values the deliverable set with the
+///      on-chain Chainlink read, skips insolvent signers, gates on the shared
+///      threshold, pulls committed tokens via Permit2, optionally runs Uniswap
+///      Swap-API calldata against the UniversalRouter (Chainlink value-guarded), then
+///      creates the v4 pool (if absent) at the Chainlink price and mints a full-range
+///      position per signer, each owned by that signer. Targets Base Sepolia v4.
 contract LPPetition is Ownable {
+    using SafeERC20 for IERC20;
+    using PoolIdLibrary for PoolKey;
+
     enum PetitionStatus {
         Open,
         Executed
@@ -41,6 +53,23 @@ contract LPPetition is Ownable {
 
     /// @notice Canonical Permit2 (same address on every chain incl. Base Sepolia).
     IAllowanceTransfer public constant PERMIT2 = IAllowanceTransfer(0x000000000022D473030F116dDEE9F6B43aC78BA3);
+
+    /// @notice Uniswap v4 contracts on Base Sepolia (this contract targets Base Sepolia).
+    IPositionManager public constant POSITION_MANAGER = IPositionManager(0xcDbe7b1ed817eF0005ECe6a3e576fbAE2EA5EAFE);
+    address public constant UNIVERSAL_ROUTER = 0x95273d871c8156636e114b63797d78D7E1720d81;
+
+    uint256 internal constant BPS = 10_000;
+
+    // PositionManager action ids. The deployed Base Sepolia PositionManager predates
+    // the *_FROM_DELTAS actions, so it uses the legacy (gapped) numbering where
+    // SETTLE_PAIR = 0x11 (current v4-periphery renumbered it to 0x0d). MINT_POSITION
+    // is 0x02 in both. Hardcoded to match the on-chain contract (verified by fork test).
+    uint8 internal constant ACTION_MINT_POSITION = 0x02;
+    uint8 internal constant ACTION_SETTLE_PAIR = 0x11;
+
+    /// @notice Max value the optional balancing swap may erode, vs the pulled TVL
+    ///         (Chainlink-priced before/after). Bounds attacker-supplied swap calldata.
+    uint256 public maxSwapSlippageBps = 100; // 1%
 
     uint256 public petitionCount;
 
@@ -64,6 +93,7 @@ contract LPPetition is Ownable {
     event SignerSkipped(uint256 indexed id, address indexed signer);
     event Executed(uint256 indexed id, uint256 totalUsdE18, bytes32 poolId);
     event PositionMinted(uint256 indexed id, address indexed signer, uint256 positionTokenId);
+    event MaxSwapSlippageSet(uint256 bps);
 
     error TokensNotSorted();
     error IdenticalTokens();
@@ -77,6 +107,10 @@ contract LPPetition is Ownable {
     error StalePrice(address feed);
     error UnsupportedFeedDecimals(address feed);
     error BelowThreshold(uint256 deliverableUsdE18, uint256 thresholdUsdE18);
+    error UnsupportedFee(uint24 fee);
+    error SwapCallFailed(uint256 index);
+    error SwapValueLoss(uint256 valueAfterE18, uint256 minValueE18);
+    error SlippageTooHigh();
 
     constructor() Ownable(msg.sender) {}
 
@@ -87,6 +121,13 @@ contract LPPetition is Ownable {
         priceFeed[token] = feed;
         priceStaleness[token] = maxStaleness;
         emit PriceFeedSet(token, address(feed), maxStaleness);
+    }
+
+    /// @notice Set the max value the optional balancing swap may erode (owner only).
+    function setMaxSwapSlippageBps(uint256 bps) external onlyOwner {
+        if (bps > BPS) revert SlippageTooHigh();
+        maxSwapSlippageBps = bps;
+        emit MaxSwapSlippageSet(bps);
     }
 
     /// @notice Create a petition for a sorted pair with a shared USD TVL threshold.
@@ -100,6 +141,7 @@ contract LPPetition is Ownable {
         if (thresholdUsdE18 == 0) revert ZeroThreshold();
         if (address(priceFeed[token0]) == address(0)) revert MissingPriceFeed(token0);
         if (address(priceFeed[token1]) == address(0)) revert MissingPriceFeed(token1);
+        _tickSpacingForFee(fee); // revert early on an unsupported fee tier
 
         id = ++petitionCount;
         _petitions[id] = Petition({
@@ -205,7 +247,11 @@ contract LPPetition is Ownable {
     ///      full-range position per signer using `calls`, then settle leftovers.
     ///      Reverts cleanly (leaving the petition Open) when the deliverable TVL is
     ///      below threshold, so an early/wrong executor attempt is a no-op.
-    function execute(uint256 id, bytes[] calldata /* calls */ ) external {
+    /// @param calls Optional Uniswap Swap API (UniversalRouter) calldata to balance the
+    ///        pulled tokens toward the pool ratio before minting. Executed against the
+    ///        UniversalRouter only and bounded by a Chainlink value-conservation check,
+    ///        so it is safe even though `execute` is permissionless. Pass empty to skip.
+    function execute(uint256 id, bytes[] calldata calls) external {
         Petition storage p = _petitions[id];
         if (p.token0 == address(0)) revert PetitionNotFound(id);
         if (p.status != PetitionStatus.Open) revert PetitionNotOpen(id);
@@ -218,8 +264,14 @@ contract LPPetition is Ownable {
 
         _pullDeliverable(id, p, deliverable);
 
-        // poolId is zero until C5 creates the pool and mints positions to signers.
-        emit Executed(id, deliverableTvl, bytes32(0));
+        // Optional balancing swap (Uniswap API calldata), Chainlink-guarded.
+        if (calls.length != 0) _runGuardedSwaps(p, calls, deliverableTvl);
+
+        // Create the v4 pool (if absent) at the Chainlink ratio and mint a full-range
+        // position per deliverable signer, each owned by that signer.
+        bytes32 poolId = _createPoolAndMint(id, p, deliverable);
+
+        emit Executed(id, deliverableTvl, poolId);
     }
 
     /// @dev Pass 1 (views only): flag the deliverable signers and sum their priced TVL.
@@ -278,5 +330,127 @@ contract LPPetition is Ownable {
     /// @dev Pull `amount` of `token` from `from` into this contract via Permit2.
     function _pull(address token, address from, uint256 amount) internal {
         PERMIT2.transferFrom(from, address(this), SafeCast.toUint160(amount), token);
+    }
+
+    /// @dev Run Uniswap-API-built calldata against the UniversalRouter to balance the
+    ///      pulled tokens, then require the Chainlink-priced holdings did not erode
+    ///      beyond `maxSwapSlippageBps` vs `refValueE18`. This bounds value extraction
+    ///      from attacker-supplied calldata (a worse swap simply reverts here).
+    function _runGuardedSwaps(Petition storage p, bytes[] calldata calls, uint256 refValueE18) internal {
+        _approvePermit2Spender(p.token0, UNIVERSAL_ROUTER);
+        _approvePermit2Spender(p.token1, UNIVERSAL_ROUTER);
+
+        for (uint256 i; i < calls.length; ++i) {
+            (bool ok,) = UNIVERSAL_ROUTER.call(calls[i]);
+            if (!ok) revert SwapCallFailed(i);
+        }
+
+        uint256 valueAfter = _holdingsValueE18(p);
+        uint256 minValue = Math.mulDiv(refValueE18, BPS - maxSwapSlippageBps, BPS);
+        if (valueAfter < minValue) revert SwapValueLoss(valueAfter, minValue);
+    }
+
+    /// @dev Create the pool (idempotent) at the Chainlink-derived price and mint a
+    ///      full-range position per deliverable signer, owned by that signer.
+    function _createPoolAndMint(uint256 id, Petition storage p, bool[] memory deliverable)
+        internal
+        returns (bytes32)
+    {
+        int24 tickSpacing = _tickSpacingForFee(p.fee);
+        PoolKey memory key = PoolKey({
+            currency0: Currency.wrap(p.token0),
+            currency1: Currency.wrap(p.token1),
+            fee: p.fee,
+            tickSpacing: tickSpacing,
+            hooks: IHooks(address(0))
+        });
+
+        POSITION_MANAGER.initializePool(key, _sqrtPriceX96(p)); // no-op if already initialized
+
+        _approvePermit2Spender(p.token0, address(POSITION_MANAGER));
+        _approvePermit2Spender(p.token1, address(POSITION_MANAGER));
+
+        int24 tickLower = TickMath.minUsableTick(tickSpacing);
+        int24 tickUpper = TickMath.maxUsableTick(tickSpacing);
+
+        _mintAll(id, key, tickLower, tickUpper, deliverable);
+        return PoolId.unwrap(key.toId());
+    }
+
+    /// @dev Loop deliverable signers and mint each a full-range position.
+    function _mintAll(uint256 id, PoolKey memory key, int24 tickLower, int24 tickUpper, bool[] memory deliverable)
+        internal
+    {
+        uint160 sqrtPriceX96 = _sqrtPriceX96(_petitions[id]);
+        uint160 sqrtA = TickMath.getSqrtPriceAtTick(tickLower);
+        uint160 sqrtB = TickMath.getSqrtPriceAtTick(tickUpper);
+
+        address[] storage s = _signers[id];
+        uint256 len = s.length;
+        for (uint256 i; i < len; ++i) {
+            if (!deliverable[i]) continue;
+            address signer = s[i];
+            Commitment storage c = _commitments[id][signer];
+            uint128 liquidity = LiquidityAmounts.getLiquidityForAmounts(sqrtPriceX96, sqrtA, sqrtB, c.amount0, c.amount1);
+            if (liquidity == 0) continue; // one-sided commit without a balancing swap (MVP)
+            uint256 tokenId = POSITION_MANAGER.nextTokenId();
+            _mintFullRange(key, tickLower, tickUpper, liquidity, c.amount0, c.amount1, signer);
+            emit PositionMinted(id, signer, tokenId);
+        }
+    }
+
+    /// @dev Encode + submit a single MINT_POSITION + SETTLE_PAIR to the PositionManager.
+    function _mintFullRange(
+        PoolKey memory key,
+        int24 tickLower,
+        int24 tickUpper,
+        uint128 liquidity,
+        uint256 amount0Max,
+        uint256 amount1Max,
+        address owner
+    ) internal {
+        bytes memory actions = abi.encodePacked(ACTION_MINT_POSITION, ACTION_SETTLE_PAIR);
+        bytes[] memory params = new bytes[](2);
+        params[0] = abi.encode(
+            key, tickLower, tickUpper, uint256(liquidity), SafeCast.toUint128(amount0Max), SafeCast.toUint128(amount1Max), owner, bytes("")
+        );
+        params[1] = abi.encode(key.currency0, key.currency1);
+        // forge-lint: disable-next-line(block-timestamp) -- deadline is the current block
+        POSITION_MANAGER.modifyLiquidities(abi.encode(actions, params), block.timestamp);
+    }
+
+    /// @dev sqrtPriceX96 for currency1/currency0 derived from the two USD feeds.
+    function _sqrtPriceX96(Petition storage p) internal view returns (uint160) {
+        uint256 price0 = _priceUsdE18(priceFeed[p.token0], priceStaleness[p.token0]);
+        uint256 price1 = _priceUsdE18(priceFeed[p.token1], priceStaleness[p.token1]);
+        uint256 num = price0 * (10 ** IERC20Metadata(p.token1).decimals());
+        uint256 den = price1 * (10 ** IERC20Metadata(p.token0).decimals());
+        uint256 ratioX192 = Math.mulDiv(num, 1 << 192, den);
+        return SafeCast.toUint160(Math.sqrt(ratioX192));
+    }
+
+    /// @dev Chainlink-priced USD value (1e18) of this contract's token0/token1 balances.
+    function _holdingsValueE18(Petition storage p) internal view returns (uint256) {
+        uint256 price0 = _priceUsdE18(priceFeed[p.token0], priceStaleness[p.token0]);
+        uint256 price1 = _priceUsdE18(priceFeed[p.token1], priceStaleness[p.token1]);
+        uint256 v0 = Math.mulDiv(IERC20(p.token0).balanceOf(address(this)), price0, 10 ** IERC20Metadata(p.token0).decimals());
+        uint256 v1 = Math.mulDiv(IERC20(p.token1).balanceOf(address(this)), price1, 10 ** IERC20Metadata(p.token1).decimals());
+        return v0 + v1;
+    }
+
+    /// @dev Approve `spender` to pull this contract's `token` via Permit2.
+    function _approvePermit2Spender(address token, address spender) internal {
+        IERC20(token).forceApprove(address(PERMIT2), type(uint256).max);
+        // forge-lint: disable-next-line(block-timestamp) -- short-lived same-tx approval window
+        PERMIT2.approve(token, spender, type(uint160).max, uint48(block.timestamp + 1 hours));
+    }
+
+    /// @dev Canonical Uniswap fee -> tickSpacing mapping (full-range needs a spacing).
+    function _tickSpacingForFee(uint24 fee) internal pure returns (int24) {
+        if (fee == 100) return 1;
+        if (fee == 500) return 10;
+        if (fee == 3000) return 60;
+        if (fee == 10000) return 200;
+        revert UnsupportedFee(fee);
     }
 }
