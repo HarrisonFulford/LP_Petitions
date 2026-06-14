@@ -88,7 +88,7 @@ Single self-contained environment — **no mainnet fork**. The demo transactions
 - `GET /public/assets/SPCX/price-data` — live indicative SpaceX price (seeds the mock SPCX aggregator + TVL display)
 - `GET /public/proof-of-reserves/SPCX` — PoR (stretch)
 
-### Uniswap v4 — Base Sepolia (official set; verify on `docs.uniswap.org/contracts/v4/deployments`)
+### Uniswap v4 — Base Sepolia (verified on `sepolia.basescan.org`, 2026-06-14)
 | Contract | Address |
 |---|---|
 | PoolManager | `0x7Da1D65F8B249183667cdE74C5CBD46dD38AA829` |
@@ -98,8 +98,10 @@ Single self-contained environment — **no mainnet fork**. The demo transactions
 | StateView | `0x571291b572ed32ce6751a2cb2486ebee8defb9b4` |
 | WETH9 | `0x4200000000000000000000000000000000000006` |
 
+> Each verified by contract name on Base Sepolia BaseScan; UniversalRouter's constructor args also reference the same PoolManager/PositionManager, cross-confirming the set. These are Base **Sepolia** addresses — do not confuse with the Base **mainnet** v4 set (`0x498581ff…` PoolManager).
+
 ### Chainlink — Base Sepolia
-- **ETH/USD Data Feed:** read via `AggregatorV3Interface` (the load-bearing on-chain read). **To pin:** exact Base Sepolia ETH/USD proxy address from `docs.chain.link`.
+- **ETH/USD Data Feed:** `0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1` (`EACAggregatorProxy`, verified on `sepolia.basescan.org` 2026-06-14, 8 decimals). Read via `AggregatorV3Interface.latestRoundData` (the load-bearing on-chain read).
 - **Mock SPCX/USD aggregator:** self-deployed `AggregatorV3`-compatible contract, owner/keeper-updated from the xStocks price.
 
 ## 8. Build Order

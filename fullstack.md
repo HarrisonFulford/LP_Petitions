@@ -87,7 +87,7 @@ event Executed(uint256 indexed id, uint256 totalUsdE18, bytes32 poolId);
 event PositionMinted(uint256 indexed id, address indexed signer, uint256 positionTokenId);
 ```
 
-**Open decision to settle in S0:** on-chain `sign()` vs off-chain signed commitment (EIP-712 + Permit2 permit stored by backend, passed as arrays into `execute`). The off-chain model is gasless and is what F3/F6 assume; confirm with Harrison.
+**S0 decision (SETTLED 2026-06-14): on-chain `sign()`.** The contract keeps the frozen ABI: users call `sign(id, amount0, amount1)` (a tx) after granting a gasless Permit2 `permit`. `execute(id, calls[])` stays as-is (no commitment/permit arrays). F3 still builds the Permit2 `permit` EIP-712 to match Harrison's schema, but commitments live on-chain — F2 storage mirrors them from `Signed` events / reads rather than holding the authoritative signed payloads. The fully-gasless off-chain model is a stretch goal.
 
 ## Definition of done (full-stack)
 - **Live public URL** (Vercel) is up and active for finalist judging, backed by a hosted DB.
