@@ -7,7 +7,7 @@ evm_version = "cancun"
 optimizer = true
 optimizer_runs = 200
 ffi = false
-fs_permissions = [{ access = "read", path = "./" }]
+fs_permissions = [{ access = "read", path = "./" }, { access = "write", path = "./deployments" }]
 
 # Fork tests run against real Base Sepolia state (Uniswap v4 + Chainlink ETH/USD).
 # Set BASE_SEPOLIA_RPC_URL in .env (see .env.example). Fork tests are skipped

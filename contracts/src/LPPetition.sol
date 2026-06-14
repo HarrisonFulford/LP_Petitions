@@ -10,7 +10,9 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {IAllowanceTransfer} from "permit2/src/interfaces/IAllowanceTransfer.sol";
 import {IPositionManager} from "@uniswap/v4-periphery/src/interfaces/IPositionManager.sol";
+import {Actions} from "@uniswap/v4-periphery/src/libraries/Actions.sol";
 import {LiquidityAmounts} from "@uniswap/v4-periphery/src/libraries/LiquidityAmounts.sol";
+import {BaseSepolia} from "./config/BaseSepolia.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
@@ -51,21 +53,14 @@ contract LPPetition is Ownable {
         bool exists;
     }
 
-    /// @notice Canonical Permit2 (same address on every chain incl. Base Sepolia).
-    IAllowanceTransfer public constant PERMIT2 = IAllowanceTransfer(0x000000000022D473030F116dDEE9F6B43aC78BA3);
-
-    /// @notice Uniswap v4 contracts on Base Sepolia (this contract targets Base Sepolia).
-    IPositionManager public constant POSITION_MANAGER = IPositionManager(0xcDbe7b1ed817eF0005ECe6a3e576fbAE2EA5EAFE);
-    address public constant UNIVERSAL_ROUTER = 0x95273d871c8156636e114b63797d78D7E1720d81;
+    /// @notice Permit2 + Uniswap v4 contracts on Base Sepolia. Single source of truth is
+    ///         the `BaseSepolia` library, so addresses can't drift between here and the
+    ///         deploy script / app config.
+    IAllowanceTransfer public constant PERMIT2 = IAllowanceTransfer(BaseSepolia.PERMIT2);
+    IPositionManager public constant POSITION_MANAGER = IPositionManager(BaseSepolia.POSITION_MANAGER);
+    address public constant UNIVERSAL_ROUTER = BaseSepolia.UNIVERSAL_ROUTER;
 
     uint256 internal constant BPS = 10_000;
-
-    // PositionManager action ids. The deployed Base Sepolia PositionManager predates
-    // the *_FROM_DELTAS actions, so it uses the legacy (gapped) numbering where
-    // SETTLE_PAIR = 0x11 (current v4-periphery renumbered it to 0x0d). MINT_POSITION
-    // is 0x02 in both. Hardcoded to match the on-chain contract (verified by fork test).
-    uint8 internal constant ACTION_MINT_POSITION = 0x02;
-    uint8 internal constant ACTION_SETTLE_PAIR = 0x11;
 
     /// @notice Max value the optional balancing swap may erode, vs the pulled TVL
     ///         (Chainlink-priced before/after). Bounds attacker-supplied swap calldata.
@@ -409,7 +404,7 @@ contract LPPetition is Ownable {
         uint256 amount1Max,
         address owner
     ) internal {
-        bytes memory actions = abi.encodePacked(ACTION_MINT_POSITION, ACTION_SETTLE_PAIR);
+        bytes memory actions = abi.encodePacked(uint8(Actions.MINT_POSITION), uint8(Actions.SETTLE_PAIR));
         bytes[] memory params = new bytes[](2);
         params[0] = abi.encode(
             key, tickLower, tickUpper, uint256(liquidity), SafeCast.toUint128(amount0Max), SafeCast.toUint128(amount1Max), owner, bytes("")
