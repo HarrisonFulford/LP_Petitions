@@ -1,7 +1,7 @@
 # Contracts Workstream — Owner: Harrison
 
 > Scope: Solidity contracts, Permit2, on-chain Chainlink read, Uniswap v4 execution, Foundry tests, deploy scripts.
-> Source of truth: `implementation_plan.md` (reconciled decisions). Where `ianimplementation.md` differs, this + `implementation_plan.md` take precedence.
+> Source of truth: `implementation_plan.md` (reconciled decisions). This workstream file is a focused execution guide and must stay synced with the main plan.
 > Counterpart workstream: `fullstack.md` (Ian).
 
 ## Locked decisions (context)
@@ -75,7 +75,7 @@ event Executed(uint256 indexed id, uint256 totalUsdE18, bytes32 poolId);
 event PositionMinted(uint256 indexed id, address indexed signer, uint256 positionTokenId);
 ```
 
-**Open decision to settle in S0:** on-chain `sign()` (commitment recorded in a tx) vs off-chain signed commitment (EIP-712 message + Permit2 permit stored by backend, passed as arrays into `execute`). The off-chain model is gasless and matches "no funds move"; if chosen, `sign` becomes an off-chain payload and `execute` takes `Commitment[]` + `PermitPayload[]`.
+**S0 decision (SETTLED 2026-06-14): on-chain `sign()`.** Commitments are recorded in a tx via `sign(id, amount0, amount1)` exactly as in the ABI above; the Permit2 allowance is granted gaslessly via a Permit2 `permit` signature, so only the commitment record costs gas. `execute(id, calls[])` keeps its frozen signature (no `Commitment[]`/`PermitPayload[]` arrays). The off-chain signed-commitment model (fully gasless, arrays into `execute`) is deferred to a stretch goal.
 
 ## Definition of done (contracts)
 - `forge test` green (incl. fork tests).
