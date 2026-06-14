@@ -78,7 +78,7 @@ contract LPPetition is Ownable {
     mapping(uint256 id => mapping(address signer => Commitment)) private _commitments;
 
     /// @notice token => USD Chainlink feed used to value commitments of that token.
-    /// @dev WETH -> real ETH/USD feed; mock SPCX -> mock SPCX/USD aggregator.
+    /// @dev WETH -> real ETH/USD feed; mock NVDA -> mock NVDA/USD aggregator.
     mapping(address token => AggregatorV3Interface) public priceFeed;
 
     /// @notice token => max allowed age (seconds) of its feed's latest answer.

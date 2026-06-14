@@ -24,6 +24,6 @@ export type PricesResponse = {
   chainId: number;
   fetchedAt: string;
   ethUsd: PriceQuote;
-  spcxUsd: PriceQuote;
+  nvdaUsd: PriceQuote;
   notes: string[];
 };

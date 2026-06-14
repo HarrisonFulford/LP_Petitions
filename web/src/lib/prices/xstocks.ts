@@ -1,8 +1,8 @@
 import { decimalUsdToE18, decimalUsdToE8 } from "./math";
 import type { PriceQuote } from "./types";
 
-const DEFAULT_PRICE_DATA_URL = "https://api.backed.fi/api/v2/public/assets/SPCXx/price-data";
-const DEFAULT_QUOTE_ASSET_URL = "https://api.xstocks.fi/api/v1/quotes/assets/SPCXx";
+const DEFAULT_PRICE_DATA_URL = "https://api.backed.fi/api/v2/public/assets/NVDAx/price-data";
+const DEFAULT_QUOTE_ASSET_URL = "https://api.xstocks.fi/api/v1/quotes/assets/NVDAx";
 const XSTOCKS_USER_AGENT = "LP-Petitions-Hackathon/1.0 (+https://github.com/HarrisonFulford/LP_Petitions)";
 const DEFAULT_FETCH_TIMEOUT_MS = 4_000;
 
@@ -32,8 +32,8 @@ function quoteFromDecimal({
 }): PriceQuote {
   const priceText = price.toString();
   return {
-    symbol: "SPCXx",
-    pair: "SPCX/USD",
+    symbol: "NVDAx",
+    pair: "NVDA/USD",
     status: "ok",
     source,
     sourceUrl,
@@ -65,7 +65,7 @@ async function fetchJson(url: string) {
 }
 
 async function tryBackedPriceData(diagnostics: string[]) {
-  const sourceUrl = process.env.XSTOCKS_SPCX_PRICE_URL || DEFAULT_PRICE_DATA_URL;
+  const sourceUrl = process.env.XSTOCKS_NVDA_PRICE_URL || DEFAULT_PRICE_DATA_URL;
   try {
     const { response, body } = await fetchJson(sourceUrl);
     if (!response.ok) {
@@ -74,7 +74,7 @@ async function tryBackedPriceData(diagnostics: string[]) {
     }
     const quote = positiveNumber((body as { quote?: unknown } | null)?.quote);
     if (!quote) {
-      diagnostics.push("Backed/xStocks price-data returned no positive quote for SPCXx.");
+      diagnostics.push("Backed/xStocks price-data returned no positive quote for NVDAx.");
       return null;
     }
     return quoteFromDecimal({ diagnostics, price: quote, source: "xstocks-price-data", sourceUrl });
@@ -86,11 +86,11 @@ async function tryBackedPriceData(diagnostics: string[]) {
   }
 }
 
-function findSpcxQuoteAsset(body: unknown): Record<string, unknown> | null {
+function findNvdaQuoteAsset(body: unknown): Record<string, unknown> | null {
   if (!body || typeof body !== "object") return null;
 
   const direct = body as Record<string, unknown>;
-  if (direct.symbol === "SPCXx" || direct.underlyingSymbol === "SPCX") return direct;
+  if (direct.symbol === "NVDAx" || direct.underlyingSymbol === "NVDA") return direct;
 
   const assets = (direct.assets ?? direct.nodes) as unknown;
   if (!Array.isArray(assets)) return null;
@@ -99,7 +99,7 @@ function findSpcxQuoteAsset(body: unknown): Record<string, unknown> | null {
     assets.find((asset) => {
       if (!asset || typeof asset !== "object") return false;
       const candidate = asset as Record<string, unknown>;
-      return candidate.symbol === "SPCXx" || candidate.underlyingSymbol === "SPCX";
+      return candidate.symbol === "NVDAx" || candidate.underlyingSymbol === "NVDA";
     }) ?? null
   );
 }
@@ -112,18 +112,18 @@ async function tryXstocksQuoteAsset(diagnostics: string[]) {
       diagnostics.push(`xStocks quote asset returned HTTP ${response.status}.`);
       return null;
     }
-    const spcx = findSpcxQuoteAsset(body);
-    if (!spcx) {
-      diagnostics.push("xStocks quote asset response did not include SPCXx/SPCX.");
+    const nvda = findNvdaQuoteAsset(body);
+    if (!nvda) {
+      diagnostics.push("xStocks quote asset response did not include NVDAx/NVDA.");
       return null;
     }
-    const bidCents = positiveNumber(spcx.bid);
-    const askCents = positiveNumber(spcx.ask);
+    const bidCents = positiveNumber(nvda.bid);
+    const askCents = positiveNumber(nvda.ask);
     if (!bidCents || !askCents) {
       diagnostics.push(
-        `xStocks quote asset found SPCXx but bid/ask unavailable (canQuote=${String(
-          spcx.canQuote,
-        )}, period=${String((spcx.limitsPerPeriod as { currentPeriod?: unknown } | undefined)?.currentPeriod)}).`,
+        `xStocks quote asset found NVDAx but bid/ask unavailable (canQuote=${String(
+          nvda.canQuote,
+        )}, period=${String((nvda.limitsPerPeriod as { currentPeriod?: unknown } | undefined)?.currentPeriod)}).`,
       );
       return null;
     }
@@ -142,11 +142,11 @@ async function tryXstocksQuoteAsset(diagnostics: string[]) {
 }
 
 function tryDemoFallback(diagnostics: string[]) {
-  const fallback = process.env.SPCX_USD_FALLBACK_PRICE;
+  const fallback = process.env.NVDA_USD_FALLBACK_PRICE;
   const price = positiveNumber(fallback ? Number(fallback) : null);
   if (!price) return null;
   diagnostics.push(
-    "Using server-configured SPCX_USD_FALLBACK_PRICE as a demo-only mock oracle seed because live xStocks public quotes are unavailable/closed.",
+    "Using server-configured NVDA_USD_FALLBACK_PRICE as a demo-only mock oracle seed because live xStocks public quotes are unavailable/closed.",
   );
   diagnostics.push(
     "This fallback is not client-supplied and must not be represented as live xStocks or Chainlink tokenized-equity market data.",
@@ -160,15 +160,15 @@ function tryDemoFallback(diagnostics: string[]) {
   });
 }
 
-export async function fetchSpcxUsdPrice(): Promise<PriceQuote> {
+export async function fetchNvdaUsdPrice(): Promise<PriceQuote> {
   const diagnostics: string[] = [];
   return (
     (await tryBackedPriceData(diagnostics)) ??
     (await tryXstocksQuoteAsset(diagnostics)) ??
     tryDemoFallback(diagnostics) ??
     {
-      symbol: "SPCXx",
-      pair: "SPCX/USD",
+      symbol: "NVDAx",
+      pair: "NVDA/USD",
       status: "unavailable",
       source: "unavailable",
       sourceUrl: null,

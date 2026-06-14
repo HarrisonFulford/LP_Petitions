@@ -2,29 +2,29 @@
 pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
-import {MockSPCX} from "../src/mocks/MockSPCX.sol";
+import {MockNVDA} from "../src/mocks/MockNVDA.sol";
 import {MockAggregatorV3} from "../src/mocks/MockAggregatorV3.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-contract MockSPCXTest is Test {
-    MockSPCX internal spcx;
+contract MockNVDATest is Test {
+    MockNVDA internal nvda;
     address internal alice = makeAddr("alice");
 
     function setUp() public {
-        spcx = new MockSPCX();
+        nvda = new MockNVDA();
     }
 
     function test_Metadata() public view {
-        assertEq(spcx.name(), "Mock SpaceX");
-        assertEq(spcx.symbol(), "SPCX");
-        assertEq(spcx.decimals(), 18);
+        assertEq(nvda.name(), "Mock NVIDIA");
+        assertEq(nvda.symbol(), "NVDA");
+        assertEq(nvda.decimals(), 18);
     }
 
     function test_PermissionlessMint() public {
         vm.prank(alice);
-        spcx.mint(alice, 1_000e18);
-        assertEq(spcx.balanceOf(alice), 1_000e18);
-        assertEq(spcx.totalSupply(), 1_000e18);
+        nvda.mint(alice, 1_000e18);
+        assertEq(nvda.balanceOf(alice), 1_000e18);
+        assertEq(nvda.totalSupply(), 1_000e18);
     }
 }
 
@@ -34,12 +34,12 @@ contract MockAggregatorV3Test is Test {
     address internal stranger = makeAddr("stranger");
 
     function setUp() public {
-        feed = new MockAggregatorV3(8, "SPCX / USD", 150e8);
+        feed = new MockAggregatorV3(8, "NVDA / USD", 150e8);
     }
 
     function test_InitialState() public view {
         assertEq(feed.decimals(), 8);
-        assertEq(feed.description(), "SPCX / USD");
+        assertEq(feed.description(), "NVDA / USD");
         assertEq(feed.version(), 1);
         (uint80 roundId, int256 answer,, uint256 updatedAt,) = feed.latestRoundData();
         assertEq(roundId, 1);

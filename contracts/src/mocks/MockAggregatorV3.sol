@@ -5,9 +5,9 @@ import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interf
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 /// @title MockAggregatorV3
-/// @notice Chainlink-compatible price feed for the SPCX/USD leg. SpaceX is a
-///         private company with no real Chainlink feed anywhere, so the keeper
-///         (owner) seeds this mock off-chain from the xStocks SPCX price.
+/// @notice Chainlink-compatible mock price feed for the NVDA/USD testnet leg.
+///         The keeper (owner) seeds this mock off-chain from official xStocks/Backed
+///         NVDAx sources because this MVP runs on Base Sepolia.
 ///         The *qualifying* Chainlink read in LPPetition is the genuine ETH/USD
 ///         feed; this mock only prices the synthetic asset.
 /// @dev Defaults to 8 decimals to match standard USD feeds.
