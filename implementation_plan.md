@@ -88,17 +88,17 @@ Single self-contained environment — **no mainnet fork**. The demo transactions
 - `GET /public/assets/SPCX/price-data` — live indicative SpaceX price (seeds the mock SPCX aggregator + TVL display)
 - `GET /public/proof-of-reserves/SPCX` — PoR (stretch)
 
-### Uniswap v4 — Base Sepolia (verified on `sepolia.basescan.org`, 2026-06-14)
+### Uniswap v4 — Base Sepolia (from official Uniswap docs + `sepolia.basescan.org`, 2026-06-14)
 | Contract | Address |
 |---|---|
-| PoolManager | `0x7Da1D65F8B249183667cdE74C5CBD46dD38AA829` |
-| PositionManager | `0xcDbe7b1ed817eF0005ECe6a3e576fbAE2EA5EAFE` |
-| UniversalRouter | `0x95273d871c8156636e114b63797d78D7E1720d81` |
+| PoolManager | `0x05E73354cFDd6745C338b50BcFDfA3Aa6fA03408` |
+| PositionManager | `0x4B2C77d209D3405F41a037Ec6c77F7F5b8e2ca80` |
+| UniversalRouter | `0x492E6456D9528771018DeB9E87ef7750EF184104` |
 | Permit2 | `0x000000000022D473030F116dDEE9F6B43aC78BA3` |
 | StateView | `0x571291b572ed32ce6751a2cb2486ebee8defb9b4` |
 | WETH9 | `0x4200000000000000000000000000000000000006` |
 
-> Each verified by contract name on Base Sepolia BaseScan; UniversalRouter's constructor args also reference the same PoolManager/PositionManager, cross-confirming the set. These are Base **Sepolia** addresses — do not confuse with the Base **mainnet** v4 set (`0x498581ff…` PoolManager).
+> Each address is cross-checked against the official Uniswap v4 deployments page and Base Sepolia BaseScan; these are Base **Sepolia** addresses — do not confuse with the Base **mainnet** v4 set (`0x498581ff…` PoolManager).
 
 ### Chainlink — Base Sepolia
 - **ETH/USD Data Feed:** `0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1` (`EACAggregatorProxy`, verified on `sepolia.basescan.org` 2026-06-14, 8 decimals). Read via `AggregatorV3Interface.latestRoundData` (the load-bearing on-chain read).
