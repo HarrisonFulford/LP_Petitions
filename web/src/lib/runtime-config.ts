@@ -1,4 +1,4 @@
-import type { Address } from "viem";
+import { getAddress, isAddress, type Address } from "viem";
 
 export type RuntimeConfig = {
   appName: string;
@@ -32,12 +32,17 @@ export type RuntimeConfig = {
     };
   };
   pendingContracts: {
-    lpPetition: null;
-    mockSpcx: null;
-    mockSpcxUsdAggregator: null;
+    lpPetition: Address | null;
+    mockSpcx: Address | null;
+    mockSpcxUsdAggregator: Address | null;
   };
   notes: string[];
 };
+
+function optionalPublicAddress(value: string | undefined): Address | null {
+  if (!value || !isAddress(value)) return null;
+  return getAddress(value);
+}
 
 export const runtimeConfig = {
   appName: "LP Petitions",
@@ -71,13 +76,15 @@ export const runtimeConfig = {
     },
   },
   pendingContracts: {
-    lpPetition: null,
-    mockSpcx: null,
-    mockSpcxUsdAggregator: null,
+    lpPetition: optionalPublicAddress(process.env.NEXT_PUBLIC_LP_PETITION_ADDRESS),
+    mockSpcx: optionalPublicAddress(process.env.NEXT_PUBLIC_MOCK_SPCX_ADDRESS),
+    mockSpcxUsdAggregator: optionalPublicAddress(
+      process.env.NEXT_PUBLIC_MOCK_SPCX_USD_AGGREGATOR_ADDRESS,
+    ),
   },
   notes: [
     "Public-safe config only: no private RPC URLs, API keys, or executor secrets.",
-    "Mock SPCX, mock SPCX/USD aggregator, and LPPetition addresses are intentionally pending until deployment.",
+    "Mock SPCX, mock SPCX/USD aggregator, and LPPetition addresses come from NEXT_PUBLIC_* deployment env vars.",
     "Address source of truth: implementation_plan.md Reference Addresses & Endpoints section.",
   ],
 } as const satisfies RuntimeConfig;

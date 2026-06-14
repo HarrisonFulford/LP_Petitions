@@ -53,6 +53,14 @@ export type UpsertCommitmentInput = {
   txHash?: Hex | null;
 };
 
+export type ConfirmCommitmentInput = {
+  contractPetitionId: string;
+  signer: Address;
+  amount0: string;
+  amount1: string;
+  txHash: Hex;
+};
+
 export type PetitionStore = {
   listPetitions(): Promise<PetitionRecord[]>;
   createPetition(input: CreatePetitionInput): Promise<PetitionRecord>;
