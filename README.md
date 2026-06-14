@@ -17,11 +17,24 @@ Stats: **TBD**
 
 LP Petitions lets users sign conditional LP commitments. A user chooses a token pair, sets how much liquidity they are willing to provide, and picks a minimum TVL threshold. Their liquidity only activates once enough compatible commitments exist. 
 
-For concentrated liquidity, users can also choose an aggressiveness level, which determines how tight their LP range is around the current token ratio. 
+For concentrated liquidity, users can also choose an aggressiveness level that tightens their LP range around the current ratio — a planned enhancement; the MVP mints full-range positions.
 
-Technical execution details: **TBD** 
+### How it works
+
+1. **Sign** — grant the petition contract a Permit2 allowance for the amounts you're willing to provide. Gasless, and no funds move; your tokens stay usable.
+2. **Aggregate** — the running, Chainlink-priced "hypothetical TVL" of all signers updates as people join.
+3. **Execute** — once it clears the threshold, one atomic transaction verifies the price on-chain (Chainlink), pulls each solvent signer's tokens, creates the pool if needed, and mints a full-range Uniswap v4 position **owned directly by each signer**. Everyone enters in the same block, or no one does.
 
 You only become an LP if the conditions you agreed to are met.
+
+### Demo & sponsor integration
+
+- **Uniswap** — built on Uniswap v4; the Uniswap API (Swap + LP) generates the pool-creation, routing, and mint calldata in the core `execute()` path. The demo runs on **Base Sepolia** with a mock tokenized-stock pair (SPCX/WETH) and produces real on-chain transaction IDs.
+- **Chainlink** — `execute()` reads a Chainlink Data Feed **on-chain** to value commitments and gate execution, so the price directly drives a state change (not just a UI read).
+
+**Live demo:** publicly hosted on Base Sepolia — connect a wallet, mint test tokens from the faucet, sign a petition, and watch it **auto-execute** the moment the threshold is crossed.
+
+See `implementation_plan.md` for the full technical plan.
 
 ## Track Specifications / Requirements:
 
