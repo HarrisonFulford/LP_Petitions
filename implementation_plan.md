@@ -11,6 +11,8 @@ Users sign conditional LP commitments for a token pair. Each commitment:
 
 When the aggregate **hypothetical TVL** clears a **shared threshold**, a single transaction pulls everyone's tokens and mints **full-range Uniswap v4 positions**, with **each position owned directly by the signer who committed it** (Option B). A signer becomes an LP only if the condition they agreed to is met, and they walk away holding an ordinary, independently-managed v4 position — no vault, no custody, no redemption step through our contract.
 
+**Demo pair / chain:** **mock SPCX / WETH** on **Base Sepolia** (a single self-contained testnet — no mainnet fork). Mock `SPCX` is a hackathon stand-in for tokenized SpaceX (`SPCXx`); WETH is the real Base Sepolia WETH so the ETH leg can be priced by a real Chainlink feed. The real `SPCXx` token/pool is referenced only narratively (and for seeding the SPCX price), never executed against on testnet.
+
 ## 2. Core Properties
 
 - **Atomic, single-block execution.** All liquidity is added inside one `execute()` transaction → one block. All signers become LPs together, or the whole thing reverts. No partial state.
@@ -44,9 +46,9 @@ When the aggregate **hypothetical TVL** clears a **shared threshold**, a single 
 
 ## 4. Execution Flow (one atomic `execute()` tx = one block)
 
-1. **On-chain Chainlink read.** `execute()` reads `AggregatorV3Interface` (ETH/USD feed for the ETH leg; xStocks on-chain oracle for the SpaceX leg), computes hypothetical TVL, and `require()`s it clears the shared threshold. *This on-chain read gates the state change → Chainlink track eligibility.*
+1. **On-chain Chainlink read.** `execute()` reads `AggregatorV3Interface` for each leg, computes hypothetical TVL, and `require()`s it clears the shared threshold. The **WETH leg uses the real Chainlink ETH/USD Data Feed** (the load-bearing, track-qualifying read); the **SPCX leg uses a mock `AggregatorV3` aggregator** we deploy and seed off-chain from the real xStocks SpaceX price (SpaceX is private — no real Chainlink feed exists anywhere). *The on-chain ETH/USD read gates the state change → Chainlink track eligibility.*
 2. **Permit2 batch pull.** `transferFrom` each solvent signer's committed tokens into the contract (skip insolvent).
-3. **Ratio balance.** Run Swap API-generated UniversalRouter calldata to balance token ratios to the current pool ratio (full-range deposits use the current ratio).
+3. **Initialize + (optional) ratio balance.** Because we create our own pool, the initial price is set from the Chainlink-derived ratio, so deposits go in at that ratio — no swap needed in the common case. If committed amounts are lopsided, run Swap API-generated UniversalRouter calldata to balance to the pool ratio.
 4. **Mint, owned by signers.** Run LP API-generated calldata: create the v4 pool if absent, then mint a **full-range position per signer with that signer's wallet set as the owner**.
 5. **Done — no bookkeeping.** The contract holds no positions and keeps no share ledger. Each signer already owns their position NFT and manages/withdraws it via the standard Uniswap PositionManager.
 
@@ -59,26 +61,29 @@ When the aggregate **hypothetical TVL** clears a **shared threshold**, a single 
 - Real **Base Sepolia** `execute()` transaction IDs for submission.
 
 ### Chainlink — aligned via on-chain read
-- **Price Feeds read on-chain inside `execute()`**, gating the mint = a real on-chain state change (satisfies "Chainlink inside your smart contracts is required"; a frontend-only read would not qualify).
+- **Real Chainlink ETH/USD Data Feed read on-chain inside `execute()`**, gating the mint = a real on-chain state change (satisfies "Chainlink inside your smart contracts is required"; a frontend-only read would not qualify).
+- **SPCX leg** uses a self-deployed mock `AggregatorV3` (seeded off-chain from the real xStocks price) because SpaceX is private and has no Chainlink feed anywhere. The *qualifying* Chainlink read is the genuine ETH/USD feed; the mock prices only the synthetic asset.
+- **Chain note:** Base Sepolia chosen because classic Chainlink Data Feeds are deployed there; they are **not** available on Unichain Sepolia (only Unichain mainnet), which is why we did not use Unichain Sepolia.
 - **No Automation / Functions** (deprecated per track note; use CRE if ever needed).
-- **Stretch (bonus, multi-service):** **Proof of Reserves** to verify SPCXx backing before forming the pool.
+- **Stretch (bonus, multi-service):** **Proof of Reserves** to verify SPCXx backing (xStocks PoR is mainnet-only data; would be referenced, not read on testnet).
 
 ## 6. Demo Strategy
 
-- **Video (≤ 3 min):** forked **Base mainnet** against the real **ETH / SPCXx** pool. Override the issuer allowlist on the fork (impersonate an allowlisted/admin address) so the full petition → execute → LP flow runs against the genuine pool with the real Uniswap API.
-- **Submission tx IDs:** **Base Sepolia** with a mock SPCXx ERC-20 + a pool we create, fed the real SpaceX price. Produces public, verifiable transaction hashes.
+Single self-contained environment — **no mainnet fork**. The demo transactions *are* the submission proof.
+
+- **Everything on Base Sepolia:** deploy mock `SPCX` + the mock SPCX aggregator + `LPPetition`; pair against real Base Sepolia WETH; create our own v4 pool. Sign petitions from a few demo wallets, watch the live TVL bar fill, then `execute()` forms the pool — producing public, verifiable tx hashes.
+- **Tokenized-stock wow factor (narrative only):** in the video, show the *real* `SPCXx` token/pool in the Uniswap app for ~10s ("SpaceX went live on Uniswap 2026-06-12, the pool is tiny — exactly the bootstrapping problem we solve"), and feed the **real SpaceX price** (xStocks API) into the testnet TVL so the numbers are genuine. No fork, no allowlist override, no impersonation.
 
 ## 7. Reference Addresses & Endpoints
 
 > Verify all against official sources during step 1 (these moved/conflicted across community lists).
 
-### SpaceX tokenized stock
+### SpaceX tokenized stock (narrative + price seeding only — not used on-chain on testnet)
 - Token `SPCXx` (xStocks / Backed), ERC-20 on Ethereum + Base mainnet: `0x68fa48b1c2fe52b3d776e1953e0e782b5044ce28`
-- **To pin:** the live v4 pool address (ETH or USDC pair) + its compliance-hook address (discover via Uniswap API/subgraph on the fork chain).
+- Used in the video to show the real pool, and to seed the mock SPCX aggregator with a genuine price.
 
 ### xStocks API (public, no auth) — `https://api.xstocks.fi/api/v2`
-- `GET /public/assets/SPCX/price-data` — live indicative SpaceX price (backend/TVL display)
-- `GET /public/oracles/SPCX` — on-chain Chainlink-based oracle contract addresses per network (for the on-chain TVL read)
+- `GET /public/assets/SPCX/price-data` — live indicative SpaceX price (seeds the mock SPCX aggregator + TVL display)
 - `GET /public/proof-of-reserves/SPCX` — PoR (stretch)
 
 ### Uniswap v4 — Base Sepolia (official set; verify on `docs.uniswap.org/contracts/v4/deployments`)
@@ -92,13 +97,14 @@ When the aggregate **hypothetical TVL** clears a **shared threshold**, a single 
 | WETH9 | `0x4200000000000000000000000000000000000006` |
 
 ### Chainlink — Base Sepolia
-- **Price Feeds:** read via `AggregatorV3Interface` at the per-pair proxy (ETH/USD etc.). **To pin:** exact Base Sepolia proxy address from `docs.chain.link`.
+- **ETH/USD Data Feed:** read via `AggregatorV3Interface` (the load-bearing on-chain read). **To pin:** exact Base Sepolia ETH/USD proxy address from `docs.chain.link`.
+- **Mock SPCX/USD aggregator:** self-deployed `AggregatorV3`-compatible contract, owner/keeper-updated from the xStocks price.
 
 ## 8. Build Order
 
-1. **Pin addresses.** Base Sepolia v4 set, Chainlink ETH/USD proxy, xStocks oracle for SPCXx, and discover the live SPCXx pool + hook on the fork chain.
-2. **Mocks + harness.** `MockERC20` ×2 (incl. mock SPCXx) and a Foundry fork-test harness (Base Sepolia + Base mainnet fork).
-3. **`LPPetition` core.** `createPetition` / `sign` (Permit2) / `hypotheticalTVL` (on-chain Chainlink) / `execute` (guarded calldata exec: Permit2 → swap → mint full-range positions owned by each signer). Guard `execute` to whitelisted targets (Permit2, UniversalRouter, PositionManager). No `withdraw`/share-ledger needed under Option B.
+1. **Pin addresses.** Base Sepolia v4 set + Chainlink ETH/USD proxy address (verify on official docs).
+2. **Mocks + harness.** Mock `SPCX` ERC-20, the mock SPCX/USD `AggregatorV3`, and a Foundry **Base Sepolia fork** test harness (tests run against the real v4 contracts + real ETH/USD feed). Pair against real Base Sepolia WETH.
+3. **`LPPetition` core.** `createPetition` / `sign` (Permit2) / `hypotheticalTVL` (real ETH/USD feed + mock SPCX aggregator) / `execute` (guarded calldata exec: Permit2 → optional swap → mint full-range positions owned by each signer). Guard `execute` to whitelisted targets (Permit2, UniversalRouter, PositionManager). No `withdraw`/share-ledger needed under Option B.
 4. **Fork tests.** Prove: on-chain price read → threshold crossed → real full-range v4 position minted and owned by each signer; insolvent-signer skip path.
 5. **Backend.** Wire Swap API + LP API; watch petitions; submit `execute()`.
 6. **Frontend.** Next.js: sign petition, live TVL progress bar, executed-state with on-chain tx link.
@@ -108,14 +114,15 @@ When the aggregate **hypothetical TVL** clears a **shared threshold**, a single 
 
 - [ ] Real on-chain tx IDs (Base Sepolia `execute()`)
 - [ ] Public GitHub repo + clear `README.md`
-- [ ] Demo video ≤ 3 min (forked Base mainnet against real SPCXx pool)
+- [ ] Demo video ≤ 3 min (Base Sepolia mock SPCX/WETH, with a narrative reference to the real SPCXx pool)
 - [ ] Uniswap Developer Feedback Form
 - [ ] Chainlink used inside the contract for a state change (on-chain price read in `execute()`)
 - [ ] Project description explains the Chainlink usage
 
 ## 10. Open Questions / Risks
 
-- **Gas ceiling:** pull + swap + one full-range mint per signer must fit one block. Fine for demo (handful of signers); note as production constraint. Option B's per-signer mints add gas vs a pooled mint, but remove all share-accounting code.
-- **v4 is mandatory (not a simplification target):** the real SPCXx pools are v4 specifically for their compliance hooks (KYC/allowlist), so the protocol stays v4. "Full-range vs concentrated" is only a position-width choice *within* v4.
-- **Pool/hook discovery:** SPCXx pool launched 2026-06-12; may be thinly indexed. Confirm chain (lean Base) and liquidity before committing the fork target.
+- **Gas ceiling:** pull + optional swap + one full-range mint per signer must fit one block. Fine for demo (handful of signers); note as production constraint. Option B's per-signer mints add gas vs a pooled mint, but remove all share-accounting code.
+- **v4 stays:** Uniswap track + tokenized-asset narrative target v4, and the Uniswap LP/Swap API speak v4. "Full-range vs concentrated" is only a position-width choice *within* v4.
+- **SpaceX has no Chainlink feed (private company):** the SPCX leg is priced by a self-deployed mock `AggregatorV3` seeded from the xStocks price; the *qualifying* Chainlink read is the real ETH/USD feed on the WETH leg. Keep the mock clearly labeled.
+- **Chainlink Data Feeds ≠ Unichain Sepolia:** feeds are on Unichain *mainnet* only, which is why the chain is Base Sepolia. Verify the exact Base Sepolia ETH/USD proxy at build time.
 - **Slippage between calldata build and execution:** handled by min-output limits in the Swap API calldata, not by block timing.
