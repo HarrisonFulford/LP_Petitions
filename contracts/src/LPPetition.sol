@@ -45,9 +45,15 @@ contract LPPetition is Ownable {
     /// @dev WETH -> real ETH/USD feed; mock SPCX -> mock SPCX/USD aggregator.
     mapping(address token => AggregatorV3Interface) public priceFeed;
 
+    /// @notice token => max allowed age (seconds) of its feed's latest answer.
+    /// @dev A value of 0 disables the time-based staleness check for that feed
+    ///      (positivity + round-completeness are always enforced). Useful on
+    ///      testnet, where Data Feeds can update infrequently.
+    mapping(address token => uint256) public priceStaleness;
+
     event PetitionCreated(uint256 indexed id, address token0, address token1, uint24 fee, uint256 thresholdUsdE18);
     event Signed(uint256 indexed id, address indexed signer, uint256 amount0, uint256 amount1);
-    event PriceFeedSet(address indexed token, address indexed feed);
+    event PriceFeedSet(address indexed token, address indexed feed, uint256 maxStaleness);
 
     error TokensNotSorted();
     error IdenticalTokens();
@@ -57,15 +63,20 @@ contract LPPetition is Ownable {
     error PetitionNotOpen(uint256 id);
     error EmptyCommitment();
     error InvalidPrice(address feed);
+    error IncompleteRound(address feed);
+    error StalePrice(address feed);
     error UnsupportedFeedDecimals(address feed);
     error ExecuteNotImplemented();
 
     constructor() Ownable(msg.sender) {}
 
-    /// @notice Register the USD price feed for a token (keeper/owner only).
-    function setPriceFeed(address token, AggregatorV3Interface feed) external onlyOwner {
+    /// @notice Register the USD price feed for a token and its max answer age (keeper/owner only).
+    /// @param maxStaleness Max age in seconds of the feed's latest answer; 0 disables the
+    ///        time-based check (positivity + round-completeness still enforced).
+    function setPriceFeed(address token, AggregatorV3Interface feed, uint256 maxStaleness) external onlyOwner {
         priceFeed[token] = feed;
-        emit PriceFeedSet(token, address(feed));
+        priceStaleness[token] = maxStaleness;
+        emit PriceFeedSet(token, address(feed), maxStaleness);
     }
 
     /// @notice Create a petition for a sorted pair with a shared USD TVL threshold.
@@ -120,8 +131,8 @@ contract LPPetition is Ownable {
         Petition storage p = _petitions[id];
         if (p.token0 == address(0)) revert PetitionNotFound(id);
 
-        uint256 price0E18 = _priceUsdE18(priceFeed[p.token0]);
-        uint256 price1E18 = _priceUsdE18(priceFeed[p.token1]);
+        uint256 price0E18 = _priceUsdE18(priceFeed[p.token0], priceStaleness[p.token0]);
+        uint256 price1E18 = _priceUsdE18(priceFeed[p.token1], priceStaleness[p.token1]);
         uint256 unit0 = 10 ** IERC20Metadata(p.token0).decimals();
         uint256 unit1 = 10 ** IERC20Metadata(p.token1).decimals();
 
@@ -160,11 +171,17 @@ contract LPPetition is Ownable {
         return _signers[id][index];
     }
 
-    /// @dev Read a USD feed and normalize the answer to 1e18. Basic positivity
-    ///      guard only; full staleness/round checks land in C3.
-    function _priceUsdE18(AggregatorV3Interface feed) internal view returns (uint256) {
-        (, int256 answer,,,) = feed.latestRoundData();
+    /// @dev Read a USD feed and normalize the answer to 1e18, validating the round:
+    ///      - answer must be strictly positive,
+    ///      - the round must be complete (updatedAt != 0),
+    ///      - and, when `maxStaleness != 0`, the answer must be no older than that.
+    ///      This is the load-bearing on-chain Chainlink read that gates `execute`.
+    function _priceUsdE18(AggregatorV3Interface feed, uint256 maxStaleness) internal view returns (uint256) {
+        (, int256 answer,, uint256 updatedAt,) = feed.latestRoundData();
         if (answer <= 0) revert InvalidPrice(address(feed));
+        if (updatedAt == 0) revert IncompleteRound(address(feed));
+        // forge-lint: disable-next-line(block-timestamp) -- staleness window is hour-scale; second-level validator drift is irrelevant
+        if (maxStaleness != 0 && block.timestamp - updatedAt > maxStaleness) revert StalePrice(address(feed));
         uint8 d = feed.decimals();
         if (d > 18) revert UnsupportedFeedDecimals(address(feed));
         // forge-lint: disable-next-line(unsafe-typecast) -- answer guaranteed > 0 above
