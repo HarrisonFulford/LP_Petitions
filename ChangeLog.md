@@ -43,3 +43,13 @@
 - **Tests:** new `test/ChainlinkRead.t.sol` (8) — valid read; zero & negative rejected; incomplete round rejected; stale rejected; fresh-within-window accepted; staleness-disabled allows old answers; below-threshold vs at-threshold gating via `isThresholdMet`.
 - **Lint:** the `block.timestamp` staleness comparison is the intended pattern (hour-scale window >> validator drift); suppressed with a justified `forge-lint` disable.
 - **Status:** `forge build` + `forge test` green (32/32). The only remaining warning is the intentional `execute` stub ("can be restricted to view"), gone once C5 lands.
+
+## 07 — C4 Permit2 pull + skip-insolvent
+
+- **`execute(id, calls)` implemented** as permissionless + single-execution. Flow: guard (`Open` only) -> set `Executed` before any transfer (reentrancy-safe) -> Chainlink-priced evaluation of the deliverable set -> threshold gate -> Permit2 batch pull into the contract -> emit `Executed`. Split into `_evaluateDeliverable` / `_pullDeliverable` helpers to stay under the stack limit.
+- **Skip-insolvent:** `_canDeliver` checks, per non-empty leg, the signer's live balance, ERC20->Permit2 approval, and a live (amount + unexpired) Permit2 allowance to this contract. A signer is included only if BOTH legs are deliverable; skipped signers emit `SignerSkipped` and are excluded from the recomputed TVL.
+- **Threshold semantics:** `execute` reverts `BelowThreshold(deliverable, threshold)` (leaving the petition `Open`, nothing pulled) so an early/insufficient executor attempt is a clean no-op — matching the live-executor requirement.
+- **Permit2 wiring:** canonical `PERMIT2` constant (`0x0000...78BA3`, same on Base Sepolia); pulls via `transferFrom(from, this, uint160 amount, token)` with checked `SafeCast.toUint160`. Declared the frozen `Executed` + `PositionMinted` events (PositionMinted emitted in C5); removed the `ExecuteNotImplemented` stub.
+- **Tests:** new `test/Execute.t.sol` (8) + `test/mocks/MockPermit2.sol` (etched at the canonical address via `vm.etch`): full pull to contract, insolvent skipped, partial/expired allowance treated as insolvent, below-threshold-after-skips revert (stays Open, no funds moved), no-signers revert, single-exec guard, permissionless caller, unknown-petition revert.
+- **Note:** until C5 mints, pulled tokens are held by the contract; C5 inserts pool-create + mint-to-signers between the pull and `Executed` and sets the real `poolId`.
+- **Status:** `forge build` + `forge test` green (39/39), zero warnings.

@@ -196,12 +196,4 @@ contract LPPetitionTest is Test {
         petition.hypotheticalTvlUsdE18(id);
     }
 
-    // --------------------------------------------------------------- execute
-
-    function test_ExecuteNotImplemented() public {
-        uint256 id = _create(10_000e18);
-        bytes[] memory calls = new bytes[](0);
-        vm.expectRevert(LPPetition.ExecuteNotImplemented.selector);
-        petition.execute(id, calls);
-    }
 }
