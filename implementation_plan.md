@@ -7,16 +7,17 @@
 Users sign conditional LP commitments for a token pair. Each commitment:
 
 - grants the petition contract a **Permit2 allowance** (tokens stay in the user's wallet and remain usable),
-- specifies committed `amountA` / `amountB`,
-- picks an **aggressiveness level** (maps to concentrated-liquidity range width around the current ratio).
+- specifies committed `amountA` / `amountB`.
 
-When the aggregate **hypothetical TVL** clears a **shared threshold**, a single transaction pulls everyone's tokens and mints concentrated Uniswap v4 positions. A signer becomes an LP only if the condition they agreed to is met.
+When the aggregate **hypothetical TVL** clears a **shared threshold**, a single transaction pulls everyone's tokens and mints **full-range Uniswap v4 positions**, with **each position owned directly by the signer who committed it** (Option B). A signer becomes an LP only if the condition they agreed to is met, and they walk away holding an ordinary, independently-managed v4 position — no vault, no custody, no redemption step through our contract.
 
 ## 2. Core Properties
 
 - **Atomic, single-block execution.** All liquidity is added inside one `execute()` transaction → one block. All signers become LPs together, or the whole thing reverts. No partial state.
 - **Tokens usable until LP'd.** Signing is a Permit2 allowance, not a transfer/lock. Funds only move during `execute()`.
 - **Solvency-check-and-skip.** At execution, each signer's live balance + allowance is checked; insolvent signers are skipped and TVL is recomputed from only deliverable commitments.
+- **Signers own their positions directly (Option B).** Each v4 position NFT is minted with the signer's wallet as owner. The contract is a pass-through coordinator that holds no positions and needs no share-accounting or `withdraw()` subsystem — signers manage/withdraw via the standard Uniswap PositionManager.
+- **Full-range MVP.** Positions span the full tick range (min→max), avoiding aggressiveness→tick math and per-range ratio balancing. Concentrated ranges are a stretch goal.
 
 ## 3. Architecture
 
@@ -24,12 +25,12 @@ When the aggregate **hypothetical TVL** clears a **shared threshold**, a single 
 ┌────────────────────────────────────────────────────────────┐
 │  LPPetition.sol  (Foundry / Solidity, Uniswap v4)           │
 │  • createPetition(pair, threshold)                          │
-│  • sign(id, amtA, amtB, aggressiveness)  ← Permit2 allowance │
+│  • sign(id, amtA, amtB)                  ← Permit2 allowance │
 │  • hypotheticalTVL(id) view              ← on-chain Chainlink │
 │  • execute(id, calldata[])               ← atomic pull+mint  │
-│  • withdraw(id)                          ← proportional      │
+│        mints full-range positions owned by each signer       │
 └────────────────────────────────────────────────────────────┘
-        ▲ funds aggregated here        │ position NFTs held here
+        ▲ funds pulled through here    │ position NFTs → signers │
         │                              ▼
 ┌────────────────────────────────────────────────────────────┐
 │  Backend orchestrator (Express/TS, ALMA-style)             │
@@ -45,9 +46,9 @@ When the aggregate **hypothetical TVL** clears a **shared threshold**, a single 
 
 1. **On-chain Chainlink read.** `execute()` reads `AggregatorV3Interface` (ETH/USD feed for the ETH leg; xStocks on-chain oracle for the SpaceX leg), computes hypothetical TVL, and `require()`s it clears the shared threshold. *This on-chain read gates the state change → Chainlink track eligibility.*
 2. **Permit2 batch pull.** `transferFrom` each solvent signer's committed tokens into the contract (skip insolvent).
-3. **Ratio balance.** Run Swap API-generated UniversalRouter calldata to balance token ratios.
-4. **Mint.** Run LP API-generated calldata: create the v4 pool if absent, mint **concentrated positions** — one per distinct aggressiveness bucket.
-5. **Bookkeeping.** Contract holds the position NFTs and records each signer's share for `withdraw()`.
+3. **Ratio balance.** Run Swap API-generated UniversalRouter calldata to balance token ratios to the current pool ratio (full-range deposits use the current ratio).
+4. **Mint, owned by signers.** Run LP API-generated calldata: create the v4 pool if absent, then mint a **full-range position per signer with that signer's wallet set as the owner**.
+5. **Done — no bookkeeping.** The contract holds no positions and keeps no share ledger. Each signer already owns their position NFT and manages/withdraws it via the standard Uniswap PositionManager.
 
 > Off-chain and pre-block (no state change): Permit2 signing by users, and the backend's REST calls to the Swap/LP APIs to build calldata. All actual liquidity provision happens in the single `execute()` block.
 
@@ -97,11 +98,11 @@ When the aggregate **hypothetical TVL** clears a **shared threshold**, a single 
 
 1. **Pin addresses.** Base Sepolia v4 set, Chainlink ETH/USD proxy, xStocks oracle for SPCXx, and discover the live SPCXx pool + hook on the fork chain.
 2. **Mocks + harness.** `MockERC20` ×2 (incl. mock SPCXx) and a Foundry fork-test harness (Base Sepolia + Base mainnet fork).
-3. **`LPPetition` core.** `createPetition` / `sign` (Permit2) / `hypotheticalTVL` (on-chain Chainlink) / `execute` (guarded calldata exec: Permit2 → swap → mint) / `withdraw`. Guard `execute` to whitelisted targets (Permit2, UniversalRouter, PositionManager).
-4. **Fork tests.** Prove: on-chain price read → threshold crossed → real v4 concentrated position minted; insolvent-signer skip path.
+3. **`LPPetition` core.** `createPetition` / `sign` (Permit2) / `hypotheticalTVL` (on-chain Chainlink) / `execute` (guarded calldata exec: Permit2 → swap → mint full-range positions owned by each signer). Guard `execute` to whitelisted targets (Permit2, UniversalRouter, PositionManager). No `withdraw`/share-ledger needed under Option B.
+4. **Fork tests.** Prove: on-chain price read → threshold crossed → real full-range v4 position minted and owned by each signer; insolvent-signer skip path.
 5. **Backend.** Wire Swap API + LP API; watch petitions; submit `execute()`.
 6. **Frontend.** Next.js: sign petition, live TVL progress bar, executed-state with on-chain tx link.
-7. **Stretch.** Proof of Reserves; per-user thresholds (sorted clearing algorithm); gas batching for >1-block scale.
+7. **Stretch.** Concentrated ranges (aggressiveness → tick width); Proof of Reserves; per-user thresholds (sorted clearing algorithm); gas batching for >1-block scale.
 
 ## 9. Submission Checklist
 
@@ -114,7 +115,7 @@ When the aggregate **hypothetical TVL** clears a **shared threshold**, a single 
 
 ## 10. Open Questions / Risks
 
-- **Gas ceiling:** pull + swap + mint for N signers must fit one block. Fine for demo (handful of signers); note as production constraint.
-- **Concentrated ranges complexity:** distinct aggressiveness levels → multiple mint calls per `execute()`. Biggest complexity adder of the chosen feature set.
+- **Gas ceiling:** pull + swap + one full-range mint per signer must fit one block. Fine for demo (handful of signers); note as production constraint. Option B's per-signer mints add gas vs a pooled mint, but remove all share-accounting code.
+- **v4 is mandatory (not a simplification target):** the real SPCXx pools are v4 specifically for their compliance hooks (KYC/allowlist), so the protocol stays v4. "Full-range vs concentrated" is only a position-width choice *within* v4.
 - **Pool/hook discovery:** SPCXx pool launched 2026-06-12; may be thinly indexed. Confirm chain (lean Base) and liquidity before committing the fork target.
 - **Slippage between calldata build and execution:** handled by min-output limits in the Swap API calldata, not by block timing.
