@@ -38,8 +38,8 @@ contract LPPetitionTest is Test {
         feedA = new MockAggregatorV3(8, "A/USD", PRICE_A);
         feedB = new MockAggregatorV3(8, "B/USD", PRICE_B);
 
-        petition.setPriceFeed(address(tokenA), feedA);
-        petition.setPriceFeed(address(tokenB), feedB);
+        petition.setPriceFeed(address(tokenA), feedA, 1 days);
+        petition.setPriceFeed(address(tokenB), feedB, 1 days);
 
         if (address(tokenA) < address(tokenB)) {
             (token0, token1) = (address(tokenA), address(tokenB));

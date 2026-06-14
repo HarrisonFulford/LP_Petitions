@@ -35,3 +35,11 @@
 - **`execute` is a guarded placeholder** (validates the id, then reverts `ExecuteNotImplemented`) so the ABI stays complete; real Permit2 pull + skip-insolvent (C4) and v4 mint-to-signers (C5) land next. One benign solc "can be restricted to view" warning is expected on this stub until C5.
 - **Helpers for off-chain parity:** `petitionCount`, `signerCount`, `signerAt` for enumerating signers from the executor/frontend.
 - **Status:** `forge build` + `forge test` green (24/24: 15 new `LPPetition.t.sol` covering create/sign/re-sign/getters/TVL/threshold-crossing/invalid-price/execute-stub).
+
+## 06 — C3 Chainlink read hardening
+
+- **Hardened `_priceUsdE18`** (the load-bearing on-chain Chainlink read that gates `execute`): now validates the round — strictly positive answer (`InvalidPrice`), complete round `updatedAt != 0` (`IncompleteRound`), and a configurable max-age staleness check (`StalePrice`).
+- **Per-feed staleness config:** `setPriceFeed(token, feed, maxStaleness)` (signature extended; admin-only, not part of the cross-team ABI) + public `priceStaleness` mapping; `PriceFeedSet` now carries the staleness. `maxStaleness == 0` disables the time-based check (positivity + completeness still enforced) — an escape hatch for testnet feeds that update infrequently and for the keeper-driven mock SPCX aggregator. C6 deploy must pass a sensible staleness (or 0) per feed.
+- **Tests:** new `test/ChainlinkRead.t.sol` (8) — valid read; zero & negative rejected; incomplete round rejected; stale rejected; fresh-within-window accepted; staleness-disabled allows old answers; below-threshold vs at-threshold gating via `isThresholdMet`.
+- **Lint:** the `block.timestamp` staleness comparison is the intended pattern (hour-scale window >> validator drift); suppressed with a justified `forge-lint` disable.
+- **Status:** `forge build` + `forge test` green (32/32). The only remaining warning is the intentional `execute` stub ("can be restricted to view"), gone once C5 lands.
