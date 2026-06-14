@@ -26,3 +26,12 @@
 - **Mocks:** `MockSPCX` (ERC-20, 18 decimals, permissionless `mint` for the demo faucet) and `MockAggregatorV3` (`AggregatorV3Interface`, 8 decimals, owner/keeper-settable answer + timestamp, with `setRoundData` for staleness tests).
 - **Fork harness:** `BaseForkTest` creates a Base Sepolia fork from `BASE_SEPOLIA_RPC_URL` and skips cleanly (not fails) when unset. `ForkSanity.t.sol` confirms all pinned contracts have code, the real v4 PoolManager responds, and the real ETH/USD feed reads (8 decimals, positive, in-band).
 - **Status:** `forge build` + `forge test` green (9/9). Fork tests verified passing against live Base Sepolia via the public RPC.
+
+## 05 — C2 Petition core
+
+- **`contracts/src/LPPetition.sol`** implements the frozen boundary for the petition lifecycle: `createPetition` (sorted-pair + threshold validation), on-chain `sign` (records/updates the caller's commitment per the S0 decision; no funds move), `getPetition`, `getCommitment`, plus `hypotheticalTvlUsdE18` and an `isThresholdMet` helper. `PetitionCreated` / `Signed` events match `contract.md`.
+- **TVL pricing:** `hypotheticalTvlUsdE18` values each commitment via a per-token Chainlink feed and normalizes to 1e18 using the token's own decimals (`amount * priceE18 / 10^tokenDecimals`). Basic positivity guard only; full staleness/round checks are deferred to C3.
+- **Price-feed registry (addition beyond the cross-team ABI):** owner-set `setPriceFeed(token, feed)` mapping (WETH -> real ETH/USD; mock SPCX -> mock SPCX/USD). This is a deploy/admin concern and does not change Ian's integration surface; `createPetition` requires both tokens to have a feed registered. Deploy scripts (C6) must call `setPriceFeed` before `createPetition`.
+- **`execute` is a guarded placeholder** (validates the id, then reverts `ExecuteNotImplemented`) so the ABI stays complete; real Permit2 pull + skip-insolvent (C4) and v4 mint-to-signers (C5) land next. One benign solc "can be restricted to view" warning is expected on this stub until C5.
+- **Helpers for off-chain parity:** `petitionCount`, `signerCount`, `signerAt` for enumerating signers from the executor/frontend.
+- **Status:** `forge build` + `forge test` green (24/24: 15 new `LPPetition.t.sol` covering create/sign/re-sign/getters/TVL/threshold-crossing/invalid-price/execute-stub).
