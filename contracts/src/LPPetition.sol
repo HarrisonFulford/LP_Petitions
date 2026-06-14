@@ -2,19 +2,23 @@
 pragma solidity ^0.8.26;
 
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import {IAllowanceTransfer} from "permit2/src/interfaces/IAllowanceTransfer.sol";
 
 /// @title LPPetition
 /// @notice Threshold-based liquidity commitments. Users sign conditional LP
 ///         commitments for a sorted token pair; once the aggregate hypothetical
 ///         TVL (Chainlink-priced) clears a shared threshold, `execute()` pulls
 ///         tokens and mints full-range Uniswap v4 positions owned by each signer.
-/// @dev C2 scope: petition lifecycle, on-chain commitment recording, and the
-///      Chainlink-priced hypothetical TVL. Robust Chainlink reads (staleness) are
-///      C3; Permit2 pull + skip-insolvent is C4; v4 execute/mint is C5. `execute`
-///      is a guarded placeholder here so the frozen ABI stays complete.
+/// @dev C4 scope: permissionless, single-exec `execute()` that values the
+///      deliverable set with the on-chain Chainlink read, skips insolvent signers,
+///      gates on the shared threshold, then pulls committed tokens via Permit2.
+///      The v4 pool-create + mint-to-signers step (consuming `calls`) lands in C5;
+///      until then pulled tokens are held by this contract.
 contract LPPetition is Ownable {
     enum PetitionStatus {
         Open,
@@ -35,6 +39,9 @@ contract LPPetition is Ownable {
         bool exists;
     }
 
+    /// @notice Canonical Permit2 (same address on every chain incl. Base Sepolia).
+    IAllowanceTransfer public constant PERMIT2 = IAllowanceTransfer(0x000000000022D473030F116dDEE9F6B43aC78BA3);
+
     uint256 public petitionCount;
 
     mapping(uint256 id => Petition) private _petitions;
@@ -54,6 +61,9 @@ contract LPPetition is Ownable {
     event PetitionCreated(uint256 indexed id, address token0, address token1, uint24 fee, uint256 thresholdUsdE18);
     event Signed(uint256 indexed id, address indexed signer, uint256 amount0, uint256 amount1);
     event PriceFeedSet(address indexed token, address indexed feed, uint256 maxStaleness);
+    event SignerSkipped(uint256 indexed id, address indexed signer);
+    event Executed(uint256 indexed id, uint256 totalUsdE18, bytes32 poolId);
+    event PositionMinted(uint256 indexed id, address indexed signer, uint256 positionTokenId);
 
     error TokensNotSorted();
     error IdenticalTokens();
@@ -66,7 +76,7 @@ contract LPPetition is Ownable {
     error IncompleteRound(address feed);
     error StalePrice(address feed);
     error UnsupportedFeedDecimals(address feed);
-    error ExecuteNotImplemented();
+    error BelowThreshold(uint256 deliverableUsdE18, uint256 thresholdUsdE18);
 
     constructor() Ownable(msg.sender) {}
 
@@ -188,9 +198,85 @@ contract LPPetition is Ownable {
         return uint256(answer) * (10 ** (18 - d));
     }
 
-    /// @notice Atomic pull + (optional swap) + mint to signers. Implemented in C4/C5.
+    /// @notice Permissionless, single-execution. Values the deliverable set with the
+    ///         on-chain Chainlink read, skips insolvent signers, gates on the shared
+    ///         threshold, then pulls committed tokens via Permit2.
+    /// @dev C4: pulls into this contract. C5 will create the v4 pool and mint a
+    ///      full-range position per signer using `calls`, then settle leftovers.
+    ///      Reverts cleanly (leaving the petition Open) when the deliverable TVL is
+    ///      below threshold, so an early/wrong executor attempt is a no-op.
     function execute(uint256 id, bytes[] calldata /* calls */ ) external {
-        if (_petitions[id].token0 == address(0)) revert PetitionNotFound(id);
-        revert ExecuteNotImplemented();
+        Petition storage p = _petitions[id];
+        if (p.token0 == address(0)) revert PetitionNotFound(id);
+        if (p.status != PetitionStatus.Open) revert PetitionNotOpen(id);
+
+        // Single-exec guard set before any external transfer (reentrancy-safe).
+        p.status = PetitionStatus.Executed;
+
+        (bool[] memory deliverable, uint256 deliverableTvl) = _evaluateDeliverable(id, p);
+        if (deliverableTvl < p.thresholdUsdE18) revert BelowThreshold(deliverableTvl, p.thresholdUsdE18);
+
+        _pullDeliverable(id, p, deliverable);
+
+        // poolId is zero until C5 creates the pool and mints positions to signers.
+        emit Executed(id, deliverableTvl, bytes32(0));
+    }
+
+    /// @dev Pass 1 (views only): flag the deliverable signers and sum their priced TVL.
+    function _evaluateDeliverable(uint256 id, Petition storage p)
+        internal
+        returns (bool[] memory deliverable, uint256 deliverableTvl)
+    {
+        uint256 price0E18 = _priceUsdE18(priceFeed[p.token0], priceStaleness[p.token0]);
+        uint256 price1E18 = _priceUsdE18(priceFeed[p.token1], priceStaleness[p.token1]);
+        uint256 unit0 = 10 ** IERC20Metadata(p.token0).decimals();
+        uint256 unit1 = 10 ** IERC20Metadata(p.token1).decimals();
+
+        address[] storage s = _signers[id];
+        uint256 len = s.length;
+        deliverable = new bool[](len);
+        for (uint256 i; i < len; ++i) {
+            address signer = s[i];
+            Commitment storage c = _commitments[id][signer];
+            if (_canDeliver(signer, p.token0, c.amount0) && _canDeliver(signer, p.token1, c.amount1)) {
+                deliverable[i] = true;
+                if (c.amount0 != 0) deliverableTvl += Math.mulDiv(c.amount0, price0E18, unit0);
+                if (c.amount1 != 0) deliverableTvl += Math.mulDiv(c.amount1, price1E18, unit1);
+            } else {
+                emit SignerSkipped(id, signer);
+            }
+        }
+    }
+
+    /// @dev Pass 2: pull committed tokens from each flagged signer into this contract.
+    function _pullDeliverable(uint256 id, Petition storage p, bool[] memory deliverable) internal {
+        address[] storage s = _signers[id];
+        uint256 len = s.length;
+        for (uint256 i; i < len; ++i) {
+            if (!deliverable[i]) continue;
+            address signer = s[i];
+            Commitment storage c = _commitments[id][signer];
+            if (c.amount0 != 0) _pull(p.token0, signer, c.amount0);
+            if (c.amount1 != 0) _pull(p.token1, signer, c.amount1);
+        }
+    }
+
+    /// @dev A leg is deliverable if it is empty, or the signer currently holds the
+    ///      amount and has both the ERC20->Permit2 approval and a live Permit2
+    ///      allowance to this contract covering it.
+    function _canDeliver(address signer, address token, uint256 amount) internal view returns (bool) {
+        if (amount == 0) return true;
+        if (IERC20(token).balanceOf(signer) < amount) return false;
+        if (IERC20(token).allowance(signer, address(PERMIT2)) < amount) return false;
+        (uint160 allowed, uint48 expiration,) = PERMIT2.allowance(signer, token, address(this));
+        if (allowed < amount) return false;
+        // forge-lint: disable-next-line(block-timestamp) -- Permit2 expirations are minute/hour-scale
+        if (block.timestamp > expiration) return false;
+        return true;
+    }
+
+    /// @dev Pull `amount` of `token` from `from` into this contract via Permit2.
+    function _pull(address token, address from, uint256 amount) internal {
+        PERMIT2.transferFrom(from, address(this), SafeCast.toUint160(amount), token);
     }
 }
