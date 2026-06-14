@@ -1,7 +1,7 @@
 # Contracts Workstream — Owner: Harrison
 
 > Scope: Solidity contracts, Permit2, on-chain Chainlink read, Uniswap v4 execution, Foundry tests, deploy scripts.
-> Source of truth: `implementation_plan.md` (reconciled decisions). Where `ianimplementation.md` differs, this + `implementation_plan.md` take precedence.
+> Source of truth: `implementation_plan.md` (reconciled decisions). This workstream file is a focused execution guide and must stay synced with the main plan.
 > Counterpart workstream: `fullstack.md` (Ian).
 
 ## Locked decisions (context)

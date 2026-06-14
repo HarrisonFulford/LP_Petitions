@@ -1,14 +1,14 @@
 # Full-Stack Workstream — Owner: Ian
 
 > Scope: Next.js frontend + backend/API, signature collection/storage, **Vercel-hosted auto-executor (reactive + cron)**, wallet UX, **live Vercel deployment**, demo/README polish.
-> Source of truth: `implementation_plan.md` (reconciled decisions). Where `ianimplementation.md` differs, this + `implementation_plan.md` take precedence.
+> Source of truth: `implementation_plan.md` (reconciled decisions). This workstream file is a focused execution guide and must stay synced with the main plan.
 > Counterpart workstream: `contract.md` (Harrison).
 
 ## Locked decisions (context)
 
 Base Sepolia · Uniswap v4 · pair **mock SPCX / WETH** · **full-range** positions · **Option B** (each signer owns their own position NFT — the proof panel shows real positions, not vault shares) · **shared threshold** · **skip-insolvent** at execute · Chainlink **ETH/USD Data Feed** + **mock SPCX/USD aggregator** · backend is a trigger + calldata builder, never custodies funds.
 
-**Must ship live for finalist judging:** publicly hosted site judges can use on the spot. **All-Vercel hosting (Vercel Pro):** Next.js frontend + API routes, **Vercel Postgres/KV** for storage (serverless filesystem is ephemeral), and **auto-execute without a separate worker** via (a) reactive execution on commit using `after()`/`waitUntil` and (b) a per-minute **Vercel Cron** sweep (Pro plan) as the safety net for price-driven crossings. Plus a faucet so an empty wallet can participate (mocks make this trivial — no KYC/allowlist).
+**Must ship live for finalist judging:** publicly hosted site judges can use on the spot. **All-Vercel hosting (Vercel Pro):** Next.js frontend + API routes, **Vercel Postgres/KV** for storage (serverless filesystem is ephemeral), and **auto-execute without a separate worker** via (a) reactive execution on commit using `after()`/`waitUntil` and (b) a per-minute **Vercel Cron** sweep (Pro plan) as the safety net for price-driven crossings. Plus onboarding so an empty wallet can participate: mint mock SPCX, use a Base Sepolia ETH faucet for gas, and wrap test ETH into WETH.
 
 ## Shared / bottleneck tasks (ALSO in `contract.md` — do these first, together)
 
@@ -53,7 +53,7 @@ One commit per sub-task; `npm run typecheck` + browser smoke before each commit.
 4. **Executed proof** — explorer tx link + **each signer's own v4 position** (Option B), and a one-line Chainlink/Uniswap sponsor summary.
 
 ### F8 — Judge onboarding / faucet
-- Visible **"mint SPCX + WETH"** button so an empty wallet can participate on the spot (mocks make this safe — no KYC/allowlist). Link a Base Sepolia ETH faucet for gas.
+- Visible onboarding controls so an empty wallet can mint mock SPCX, open a Base Sepolia ETH faucet for gas, and wrap test ETH into WETH.
 
 ### F9 — Deploy & make live (finalist requirement) — all on Vercel
 - **One platform: Vercel (Pro).** Frontend + API routes + Vercel Cron + Vercel Postgres/KV. No separate worker host.
@@ -92,7 +92,7 @@ event PositionMinted(uint256 indexed id, address indexed signer, uint256 positio
 ## Definition of done (full-stack)
 - **Live public URL** (Vercel) is up and active for finalist judging, backed by a hosted DB.
 - Create/list petitions; commitments persist + stay ordered across refresh and deploys.
-- Wallet connect → faucet mint → Permit2 approve → sign commitment works on Base Sepolia.
+- Wallet connect → mint mock SPCX → wrap faucet ETH into WETH → Permit2 approve → sign commitment works on Base Sepolia.
 - Progress bar reflects Chainlink-priced TVL; **auto-execute (reactive + Vercel Cron) fires at threshold** with no manual click; proof panel shows the explorer link + each signer's position.
 - A fresh wallet can complete the full flow on the live site unaided.
 - No executor key exposed client-side; all secrets in hosted env.
