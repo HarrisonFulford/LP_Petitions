@@ -18,3 +18,11 @@
 ## 03
 
 - Reverted `implementation_plan.md` changes from Phase/commit discipline planning regarding phase plans and commit rules
+
+## 04 — C1 Foundry scaffold + mocks
+
+- **Repo layout:** Solidity workstream lives in a new `contracts/` subdirectory (Foundry), keeping it separate from Ian's full-stack app. Deps installed as git submodules under `contracts/lib/`: forge-std, v4-core (v4.0.0), v4-periphery, permit2, openzeppelin-contracts (v5.6.1), chainlink-brownie-contracts (1.3.0). Toolchain: Foundry v1.7.1, solc 0.8.26, `evm_version = cancun` (required by v4).
+- **Pinned addresses in code:** `contracts/src/config/BaseSepolia.sol` holds the S1-verified addresses as constants (StateView re-checksummed). Single source for the harness + future deploy scripts.
+- **Mocks:** `MockSPCX` (ERC-20, 18 decimals, permissionless `mint` for the demo faucet) and `MockAggregatorV3` (`AggregatorV3Interface`, 8 decimals, owner/keeper-settable answer + timestamp, with `setRoundData` for staleness tests).
+- **Fork harness:** `BaseForkTest` creates a Base Sepolia fork from `BASE_SEPOLIA_RPC_URL` and skips cleanly (not fails) when unset. `ForkSanity.t.sol` confirms all pinned contracts have code, the real v4 PoolManager responds, and the real ETH/USD feed reads (8 decimals, positive, in-band).
+- **Status:** `forge build` + `forge test` green (9/9). Fork tests verified passing against live Base Sepolia via the public RPC.
