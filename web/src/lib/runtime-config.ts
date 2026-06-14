@@ -11,8 +11,8 @@ export type RuntimeConfig = {
   };
   explorerUrl: "https://sepolia.basescan.org";
   pair: {
-    label: "SPCX/WETH";
-    token0Symbol: "SPCX";
+    label: "NVDA/WETH";
+    token0Symbol: "NVDA";
     token1Symbol: "WETH";
   };
   defaultFeeTier: {
@@ -33,8 +33,8 @@ export type RuntimeConfig = {
   };
   pendingContracts: {
     lpPetition: Address | null;
-    mockSpcx: Address | null;
-    mockSpcxUsdAggregator: Address | null;
+    mockNvda: Address | null;
+    mockNvdaUsdAggregator: Address | null;
   };
   notes: string[];
 };
@@ -55,8 +55,8 @@ export const runtimeConfig = {
   },
   explorerUrl: "https://sepolia.basescan.org",
   pair: {
-    label: "SPCX/WETH",
-    token0Symbol: "SPCX",
+    label: "NVDA/WETH",
+    token0Symbol: "NVDA",
     token1Symbol: "WETH",
   },
   defaultFeeTier: {
@@ -77,14 +77,14 @@ export const runtimeConfig = {
   },
   pendingContracts: {
     lpPetition: optionalPublicAddress(process.env.NEXT_PUBLIC_LP_PETITION_ADDRESS),
-    mockSpcx: optionalPublicAddress(process.env.NEXT_PUBLIC_MOCK_SPCX_ADDRESS),
-    mockSpcxUsdAggregator: optionalPublicAddress(
-      process.env.NEXT_PUBLIC_MOCK_SPCX_USD_AGGREGATOR_ADDRESS,
+    mockNvda: optionalPublicAddress(process.env.NEXT_PUBLIC_MOCK_NVDA_ADDRESS),
+    mockNvdaUsdAggregator: optionalPublicAddress(
+      process.env.NEXT_PUBLIC_MOCK_NVDA_USD_AGGREGATOR_ADDRESS,
     ),
   },
   notes: [
     "Public-safe config only: no private RPC URLs, API keys, or executor secrets.",
-    "Mock SPCX, mock SPCX/USD aggregator, and LPPetition addresses come from NEXT_PUBLIC_* deployment env vars.",
+    "Mock NVDA, mock NVDA/USD aggregator, and LPPetition addresses come from NEXT_PUBLIC_* deployment env vars.",
     "Address source of truth: implementation_plan.md Reference Addresses & Endpoints section.",
   ],
 } as const satisfies RuntimeConfig;

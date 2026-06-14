@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 import {BaseForkTest} from "./BaseForkTest.sol";
 import {BaseSepolia} from "../src/config/BaseSepolia.sol";
 import {LPPetition} from "../src/LPPetition.sol";
-import {MockSPCX} from "../src/mocks/MockSPCX.sol";
+import {MockNVDA} from "../src/mocks/MockNVDA.sol";
 import {MockAggregatorV3} from "../src/mocks/MockAggregatorV3.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import {IAllowanceTransfer} from "permit2/src/interfaces/IAllowanceTransfer.sol";
@@ -17,10 +17,10 @@ contract ExecuteForkTest is BaseForkTest {
     LPPetition internal petition;
 
     // Both are 18-decimal mock ERC20s. `weth` is priced by the REAL Chainlink
-    // ETH/USD feed (mirrors production); `spcx` by a mock SPCX/USD aggregator.
-    MockSPCX internal weth;
-    MockSPCX internal spcx;
-    MockAggregatorV3 internal spcxFeed;
+    // ETH/USD feed (mirrors production); `nvda` by a mock NVDA/USD aggregator.
+    MockNVDA internal weth;
+    MockNVDA internal nvda;
+    MockAggregatorV3 internal nvdaFeed;
 
     address internal token0;
     address internal token1;
@@ -44,25 +44,25 @@ contract ExecuteForkTest is BaseForkTest {
         // forge-lint: disable-next-line(block-timestamp) -- test setup, fork block time
         exp = uint48(block.timestamp + 1 days);
 
-        weth = new MockSPCX();
-        spcx = new MockSPCX();
-        spcxFeed = new MockAggregatorV3(8, "SPCX/USD", 150e8);
+        weth = new MockNVDA();
+        nvda = new MockNVDA();
+        nvdaFeed = new MockAggregatorV3(8, "NVDA/USD", 150e8);
 
         // Real ETH/USD feed; staleness disabled so testnet feed lag can't flake the test.
         petition.setPriceFeed(address(weth), AggregatorV3Interface(BaseSepolia.ETH_USD_FEED), 0);
-        petition.setPriceFeed(address(spcx), spcxFeed, 1 days);
+        petition.setPriceFeed(address(nvda), nvdaFeed, 1 days);
 
         (token0, token1) =
-            address(weth) < address(spcx) ? (address(weth), address(spcx)) : (address(spcx), address(weth));
+            address(weth) < address(nvda) ? (address(weth), address(nvda)) : (address(nvda), address(weth));
     }
 
     /// Fund + grant ERC20->Permit2 and Permit2->petition (max) allowances on real Permit2.
     function _enable(address signer, uint256 a0, uint256 a1) internal {
-        MockSPCX(token0).mint(signer, a0);
-        MockSPCX(token1).mint(signer, a1);
+        MockNVDA(token0).mint(signer, a0);
+        MockNVDA(token1).mint(signer, a1);
         vm.startPrank(signer);
-        MockSPCX(token0).approve(PERMIT2, type(uint256).max);
-        MockSPCX(token1).approve(PERMIT2, type(uint256).max);
+        MockNVDA(token0).approve(PERMIT2, type(uint256).max);
+        MockNVDA(token1).approve(PERMIT2, type(uint256).max);
         IAllowanceTransfer(PERMIT2).approve(token0, address(petition), type(uint160).max, exp);
         IAllowanceTransfer(PERMIT2).approve(token1, address(petition), type(uint160).max, exp);
         vm.stopPrank();

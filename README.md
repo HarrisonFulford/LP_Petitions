@@ -29,10 +29,10 @@ You only become an LP if the conditions you agreed to are met.
 
 ### Demo & sponsor integration
 
-- **Uniswap** — built on Uniswap v4; the Uniswap API (Swap + LP) generates the pool-creation, routing, and mint calldata in the core `execute()` path. The demo runs on **Base Sepolia** with a mock tokenized-stock pair (SPCX/WETH) and produces real on-chain transaction IDs.
+- **Uniswap** — built on Uniswap v4; the Uniswap API (Swap + LP) generates the pool-creation, routing, and mint calldata in the core `execute()` path. The demo runs on **Base Sepolia** with a mock tokenized-stock pair (NVDA/WETH) and produces real on-chain transaction IDs.
 - **Chainlink** — `execute()` reads a Chainlink Data Feed **on-chain** to value commitments and gate execution, so the price directly drives a state change (not just a UI read).
 
-**Live demo:** publicly hosted on Base Sepolia — connect a wallet, mint mock SPCX, wrap faucet ETH into WETH, sign a petition, and watch it **auto-execute** the moment the threshold is crossed.
+**Live demo:** publicly hosted on Base Sepolia — connect a wallet, mint mock NVDA, wrap faucet ETH into WETH, sign a petition, and watch it **auto-execute** the moment the threshold is crossed.
 
 See `implementation_plan.md` for the full technical plan.
 

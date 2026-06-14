@@ -31,8 +31,8 @@ export function PriceDevPanel() {
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-muted">F4a price feed</p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight">Server-side prices</h2>
           <p className="mt-2 text-sm leading-6 text-muted">
-            ETH/USD is read from Chainlink on Base Sepolia. SPCX/USD uses xStocks/Backed first,
-            then demo-safe server fallbacks when quote data is unavailable.
+            ETH/USD is read from Chainlink on Base Sepolia. NVDA/USD uses official xStocks/Backed
+            sources only, with an explicit demo-only server fallback when live quote data is unavailable.
           </p>
         </div>
         <a className="font-mono text-sm underline" href="/api/prices">
@@ -45,7 +45,7 @@ export function PriceDevPanel() {
       {prices ? (
         <div className="mt-5 grid gap-4 lg:grid-cols-2">
           <PriceCard quote={prices.ethUsd} />
-          <PriceCard quote={prices.spcxUsd} />
+          <PriceCard quote={prices.nvdaUsd} />
         </div>
       ) : null}
     </section>
