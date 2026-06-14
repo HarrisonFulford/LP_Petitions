@@ -35,13 +35,14 @@ When the aggregate **hypothetical TVL** clears a **shared threshold**, a single 
         ▲ funds pulled through here    │ position NFTs → signers │
         │                              ▼
 ┌────────────────────────────────────────────────────────────┐
-│  Backend orchestrator (Express/TS, ALMA-style)             │
-│  • Watches petitions; estimates when threshold is met       │
-│  • Builds calldata: Uniswap Swap API + LP API               │
-│  • Calls execute() (single execution path, no Automation)   │
+│  Auto-executor — all on Vercel (Pro)                       │
+│  • Reactive on commit (after()/waitUntil) — instant         │
+│  • Vercel Cron sweep every minute — price-driven crossings  │
+│  • Builds Uniswap Swap API + LP API calldata                │
+│  • AUTO-calls execute() at threshold (single-exec guard)    │
 └────────────────────────────────────────────────────────────┘
         │
-        ▼  Next.js frontend: sign petition, live TVL bar, tx link
+        ▼  Next.js on Vercel + Vercel Postgres/KV: sign, live TVL bar, faucet, tx link
 ```
 
 ## 4. Execution Flow (one atomic `execute()` tx = one block)
@@ -71,7 +72,8 @@ When the aggregate **hypothetical TVL** clears a **shared threshold**, a single 
 
 Single self-contained environment — **no mainnet fork**. The demo transactions *are* the submission proof.
 
-- **Everything on Base Sepolia:** deploy mock `SPCX` + the mock SPCX aggregator + `LPPetition`; pair against real Base Sepolia WETH; create our own v4 pool. Sign petitions from a few demo wallets, watch the live TVL bar fill, then `execute()` forms the pool — producing public, verifiable tx hashes.
+- **Live, hosted, always-on (finalist requirement):** the site ships publicly — **all on Vercel (Pro): frontend + API + Cron + Vercel Postgres/KV**, no separate worker — so judges can use it on the spot. A fresh wallet can **mint test tokens (faucet) → sign → watch it auto-execute** end to end. Contracts are already "live" on public Base Sepolia.
+- **Everything on Base Sepolia:** deploy mock `SPCX` + the mock SPCX aggregator + `LPPetition`; pair against real Base Sepolia WETH; create our own v4 pool. Sign petitions from a few demo wallets, watch the live TVL bar fill; the worker **auto-executes** at threshold to form the pool — producing public, verifiable tx hashes.
 - **Tokenized-stock wow factor (narrative only):** in the video, show the *real* `SPCXx` token/pool in the Uniswap app for ~10s ("SpaceX went live on Uniswap 2026-06-12, the pool is tiny — exactly the bootstrapping problem we solve"), and feed the **real SpaceX price** (xStocks API) into the testnet TVL so the numbers are genuine. No fork, no allowlist override, no impersonation.
 
 ## 7. Reference Addresses & Endpoints
@@ -106,13 +108,15 @@ Single self-contained environment — **no mainnet fork**. The demo transactions
 2. **Mocks + harness.** Mock `SPCX` ERC-20, the mock SPCX/USD `AggregatorV3`, and a Foundry **Base Sepolia fork** test harness (tests run against the real v4 contracts + real ETH/USD feed). Pair against real Base Sepolia WETH.
 3. **`LPPetition` core.** `createPetition` / `sign` (Permit2) / `hypotheticalTVL` (real ETH/USD feed + mock SPCX aggregator) / `execute` (guarded calldata exec: Permit2 → optional swap → mint full-range positions owned by each signer). Guard `execute` to whitelisted targets (Permit2, UniversalRouter, PositionManager). No `withdraw`/share-ledger needed under Option B.
 4. **Fork tests.** Prove: on-chain price read → threshold crossed → real full-range v4 position minted and owned by each signer; insolvent-signer skip path.
-5. **Backend.** Wire Swap API + LP API; watch petitions; submit `execute()`.
-6. **Frontend.** Next.js: sign petition, live TVL progress bar, executed-state with on-chain tx link.
-7. **Stretch.** Concentrated ranges (aggressiveness → tick width); Proof of Reserves; per-user thresholds (sorted clearing algorithm); gas batching for >1-block scale.
+5. **Auto-executor (Vercel-native).** Shared executor module; **reactive** trigger on commit via `after()`/`waitUntil` + **Vercel Cron** minute sweep; wire Swap API + LP API; idempotent (DB lock + contract single-exec).
+6. **Frontend + faucet.** Next.js: sign petition, live TVL progress bar, faucet (mint SPCX + WETH), auto-executing → executed state with on-chain tx link.
+7. **Deploy live (all Vercel, Pro).** Frontend + API + Cron + Vercel Postgres/KV; cron in `vercel.json`, bump `maxDuration`; all secrets in env. Public URL up and active for finalist judging.
+8. **Stretch.** Concentrated ranges (aggressiveness → tick width); Proof of Reserves; per-user thresholds (sorted clearing algorithm); gas batching for >1-block scale.
 
 ## 9. Submission Checklist
 
 - [ ] Real on-chain tx IDs (Base Sepolia `execute()`)
+- [ ] **Live, publicly hosted, always-on site** (finalist judging) — faucet + auto-execute work for a fresh wallet
 - [ ] Public GitHub repo + clear `README.md`
 - [ ] Demo video ≤ 3 min (Base Sepolia mock SPCX/WETH, with a narrative reference to the real SPCXx pool)
 - [ ] Uniswap Developer Feedback Form
