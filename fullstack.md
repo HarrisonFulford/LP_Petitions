@@ -34,7 +34,7 @@ One commit per sub-task; `npm run typecheck` + browser smoke before each commit.
 - Build the EIP-712 commitment typed data + Permit2 permit to match Harrison's schema exactly (S0). Verify the connected-wallet signature server-side before storing.
 
 ### F4 — Price fetch (display + seed mock aggregator)
-- Fetch ETH/USD (Chainlink) and SpaceX price (`xstocks.fi /public/assets/SPCX/price-data`). Feed the SpaceX price to the keeper that updates the mock SPCX/USD aggregator. Never trust client-supplied prices.
+- Fetch ETH/USD (Chainlink) and SpaceX price. xStocks public price data now routes through Backed's API (`https://api.backed.fi/api/v2/public/assets/SPCXx/price-data`), with quote-assets/CoinGecko/server-env fallback when the official quote is null/closed. Feed the SpaceX price to the keeper that updates the mock SPCX/USD aggregator. Never trust client-supplied prices.
 
 ### F5 — TVL progress + threshold
 - Compute live "hypothetical TVL" from stored commitments × prices; render the progress bar; mark when the shared threshold is crossed. (Contract is the final authority.)

@@ -102,7 +102,7 @@ Single self-contained environment — **no mainnet fork**. The demo transactions
 
 ### Chainlink — Base Sepolia
 - **ETH/USD Data Feed:** `0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1` (`EACAggregatorProxy`, verified on `sepolia.basescan.org` 2026-06-14, 8 decimals). Read via `AggregatorV3Interface.latestRoundData` (the load-bearing on-chain read).
-- **Mock SPCX/USD aggregator:** self-deployed `AggregatorV3`-compatible contract, owner/keeper-updated from the xStocks price.
+- **Mock SPCX/USD aggregator:** self-deployed `AggregatorV3`-compatible contract, owner/keeper-updated from the xStocks price. Current public API path is Backed/xStocks `https://api.backed.fi/api/v2/public/assets/SPCXx/price-data`; quote can be `null` outside quoting windows, so the backend exposes source diagnostics and server-side fallback price sources for demo continuity.
 
 ## 8. Build Order
 
