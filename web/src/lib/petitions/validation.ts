@@ -1,7 +1,11 @@
 import { getAddress, isAddress, isHex } from "viem";
 
 import { runtimeConfig } from "@/lib/runtime-config";
-import type { CreatePetitionInput, UpsertCommitmentInput } from "./types";
+import type {
+  ConfirmCommitmentInput,
+  CreatePetitionInput,
+  UpsertCommitmentInput,
+} from "./types";
 
 const UINT_STRING = /^(0|[1-9]\d*)$/;
 const UINT24_MAX = 16_777_215;
@@ -68,6 +72,12 @@ function optionalTxHash(value: unknown) {
   return value;
 }
 
+function requiredTxHash(value: unknown) {
+  const txHash = optionalTxHash(value);
+  if (!txHash) throw new ValidationError("txHash is required");
+  return txHash;
+}
+
 export function parseJsonObject(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new ValidationError("request body must be a JSON object");
@@ -115,5 +125,18 @@ export function parseUpsertCommitment(value: unknown): UpsertCommitmentInput {
     amount0,
     amount1,
     txHash: optionalTxHash(body.txHash),
+  };
+}
+
+export function parseConfirmCommitment(value: unknown): ConfirmCommitmentInput {
+  const body = parseJsonObject(value);
+  const commitment = parseUpsertCommitment(body);
+
+  return {
+    contractPetitionId: requiredUintString(body.contractPetitionId, "contractPetitionId"),
+    signer: commitment.signer,
+    amount0: commitment.amount0,
+    amount1: commitment.amount1,
+    txHash: requiredTxHash(body.txHash),
   };
 }

@@ -1,3 +1,4 @@
+import { CommitmentSignPanel } from "@/components/commitment-sign-panel";
 import { runtimeConfig } from "@/lib/runtime-config";
 
 function explorerAddressUrl(address: string) {
@@ -67,6 +68,8 @@ export default function Home() {
         <AddressPanel title="Core contracts" rows={coreContracts} />
         <AddressPanel title="Uniswap v4 contracts" rows={uniswapContracts} />
       </section>
+
+      <CommitmentSignPanel />
 
       <section className="rounded-3xl border border-panel-border bg-panel p-6 shadow-sm">
         <h2 className="text-lg font-semibold">Runtime notes</h2>
