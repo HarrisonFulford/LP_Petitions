@@ -49,7 +49,7 @@ One commit per sub-task; `forge test` green before each commit.
 - Fork tests (live Base Sepolia): pool created; each position owned by its signer; insolvent skipped; single-exec guard.
 
 ### C6 — Deploy scripts — DONE
-- `script/Deploy.s.sol`: deploys `MockSPCX` + mock SPCX/USD aggregator (seed $150) + `LPPetition`; registers both feeds (WETH→real ETH/USD, SPCX→mock, 24h staleness); opens a demo petition (fee 3000, $5k threshold); mints 1,000 SPCX to the deployer + optional `DEMO_WALLETS`; prints an address book and writes `deployments/base-sepolia.json` for Ian. WETH is real (not minted) — wallets wrap testnet ETH via the faucet.
+- `script/Deploy.s.sol`: deploys `MockNVDA` + mock NVDA/USD aggregator (seed $150) + `LPPetition`; registers both feeds (WETH→real ETH/USD, NVDA→mock, 24h staleness); opens a demo petition (fee 3000, $5k threshold); mints 1,000 NVDA to the deployer + optional `DEMO_WALLETS`; prints an address book and writes `deployments/base-sepolia.json` for Ian. WETH is real (not minted) — wallets wrap testnet ETH via the faucet.
 - Run: `forge script script/Deploy.s.sol:Deploy --rpc-url $BASE_SEPOLIA_RPC_URL --broadcast` with `PRIVATE_KEY` set. Validated via simulation (dry-run).
 
 ### C6 — Deploy scripts
