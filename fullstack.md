@@ -14,7 +14,7 @@ Base Sepolia · Uniswap v4 · pair **mock NVDA / WETH** · **full-range** positi
 
 These block both workstreams. Settle before parallel work.
 
-- **S0 — Lock the interface boundary (Phase 0, both present).** Freeze the `LPPetition` ABI (below), the commitment EIP-712 typed-data + Permit2 permit shape, the event schema, and the runtime config (addresses + chainId). Both sides build against the frozen version; later changes require a sync. Mock the contract behind this ABI so frontend/backend aren't blocked on Harrison.
+- **S0 — Lock the interface boundary (Phase 0, both present).** Freeze the `LPPetition` ABI (below), the Permit2 (AllowanceTransfer) `permit` typed-data shape — the only signed payload; there is no custom commitment EIP-712 — the event schema, and the runtime config (addresses + chainId). Both sides build against the frozen version; later changes require a sync. Mock the contract behind this ABI so frontend/backend aren't blocked on Harrison.
 - **S1 — Pin addresses (Harrison leads; Ian records in app config).** Base Sepolia v4 set + Chainlink ETH/USD feed proxy → one `RuntimeConfig`.
 - **S2 — Deploy to Base Sepolia + mint demo balances (Harrison runs; Ian consumes addresses).** Wire the app to the deployed `LPPetition`, mock NVDA, mock aggregator.
 - **S3 — End-to-end integration + demo + submission (shared).** One real `execute()` on Base Sepolia; record tx hashes; finalize README, demo video, and Uniswap Developer Feedback Form.
@@ -31,7 +31,10 @@ One commit per sub-task; `npm run typecheck` + browser smoke before each commit.
 - Routes: `GET/POST /api/petitions`, `GET /api/petitions/:id`, `POST /api/petitions/:id/commitments`.
 
 ### F3 — Commitment signing (parity with contract)
-- Build the EIP-712 commitment typed data + Permit2 permit to match Harrison's schema exactly (S0). Verify the connected-wallet signature server-side before storing.
+- **No custom commitment schema.** `LPPetition.sign(id, amount0, amount1)` verifies no signature; the only typed data is the **standard Permit2 AllowanceTransfer** permit (`PermitBatch`/`PermitSingle`), domain `{name: "Permit2", chainId, verifyingContract: PERMIT2}` (no `version`).
+- **`spender` MUST be the `LPPetition` address** — `execute` reads `PERMIT2.allowance(signer, token, address(this))` (the *stored* allowance), so the permit must be **registered on-chain via `PERMIT2.permit()`** before `execute`; a bare signature is not read by the contract. Per signer: ERC20 `approve(PERMIT2)` (one-time) → sign `PermitBatch` (gasless) → submit `PERMIT2.permit()` → call `sign()`.
+- `amount0`/`amount1` map to the petition's **sorted** `token0`/`token1` (read via `getPetition`), not the display pair order.
+- Server-side signature verification is optional/cosmetic (the contract relies on the stored Permit2 allowance, not a passed-in signature); F2 mirrors commitments from the on-chain `Signed` event.
 
 ### F4 — Price fetch (display + seed mock aggregator)
 - Fetch ETH/USD (Chainlink) and NVDAx price. NVDA/USD must use official xStocks/Backed public sources only: Backed price-data (`https://api.backed.fi/api/v2/public/assets/NVDAx/price-data`) first, then xStocks quote metadata (`https://api.xstocks.fi/api/v1/quotes/assets/NVDAx`) if price-data is null/closed. For demo continuity, an explicit server-side `NVDA_USD_FALLBACK_PRICE` may seed the mock oracle, but it must be labeled as demo-only fallback — not live xStocks/Chainlink market data. Feed the NVDAx price to the keeper that updates the mock NVDA/USD aggregator. Never trust client-supplied prices.
@@ -87,7 +90,7 @@ event Executed(uint256 indexed id, uint256 totalUsdE18, bytes32 poolId);
 event PositionMinted(uint256 indexed id, address indexed signer, uint256 positionTokenId);
 ```
 
-**S0 decision (SETTLED 2026-06-14): on-chain `sign()`.** The contract keeps the frozen ABI: users call `sign(id, amount0, amount1)` (a tx) after granting a gasless Permit2 `permit`. `execute(id, calls[])` stays as-is (no commitment/permit arrays). F3 still builds the Permit2 `permit` EIP-712 to match Harrison's schema, but commitments live on-chain — F2 storage mirrors them from `Signed` events / reads rather than holding the authoritative signed payloads. The fully-gasless off-chain model is a stretch goal.
+**S0 decision (SETTLED 2026-06-14): on-chain `sign()`.** The contract keeps the frozen ABI: users call `sign(id, amount0, amount1)` (a tx) after granting a Permit2 allowance. `execute(id, calls[])` stays as-is (no commitment/permit arrays). F3 builds the **standard Permit2 AllowanceTransfer** `permit` (there is no custom commitment EIP-712 — `sign()` checks no signature); the allowance must be **registered on-chain via `PERMIT2.permit()`** before `execute`, since the contract reads the stored `PERMIT2.allowance(...)`. Commitments live on-chain — F2 storage mirrors them from `Signed` events / reads rather than holding signed payloads. The fully-gasless off-chain model is a stretch goal.
 
 ## Definition of done (full-stack)
 - **Live public URL** (Vercel) is up and active for finalist judging, backed by a hosted DB.

@@ -14,7 +14,7 @@ Base Sepolia · Uniswap v4 · pair **mock NVDA / WETH** · **full-range** positi
 
 These block both workstreams. Settle before parallel work.
 
-- **S0 — Lock the interface boundary (Phase 0, both present).** Freeze the `LPPetition` ABI (below), the commitment EIP-712 typed-data + Permit2 permit shape, the event schema, and the runtime config (addresses + chainId). Both sides build against the frozen version; later changes require a sync.
+- **S0 — Lock the interface boundary (Phase 0, both present).** Freeze the `LPPetition` ABI (below), the Permit2 (AllowanceTransfer) `permit` typed-data shape — the only signed payload; there is no custom commitment EIP-712 — the event schema, and the runtime config (addresses + chainId). Both sides build against the frozen version; later changes require a sync.
 - **S1 — Pin addresses (Harrison leads; Ian records in app config).** Base Sepolia v4 set (PoolManager, PositionManager, UniversalRouter, StateView, Permit2, WETH9) + Chainlink ETH/USD feed proxy. Verify against official docs.
 - **S2 — Deploy to Base Sepolia + mint demo balances (Harrison runs; Ian consumes addresses).** Mock NVDA, mock NVDA/USD aggregator, `LPPetition`; fund demo wallets with NVDA + WETH.
 - **S3 — End-to-end integration + demo + submission (shared).** One real `execute()` on Base Sepolia; record tx hashes; finalize README, demo video, and Uniswap Developer Feedback Form.
