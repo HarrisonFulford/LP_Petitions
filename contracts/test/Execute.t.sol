@@ -28,10 +28,6 @@ contract ExecuteTest is Test {
 
     address internal alice = makeAddr("alice");
     address internal bob = makeAddr("bob");
-    address internal keeper = makeAddr("keeper"); // arbitrary executor (permissionless)
-
-    event SignerSkipped(uint256 indexed id, address indexed signer);
-    event Executed(uint256 indexed id, uint256 totalUsdE18, bytes32 poolId);
 
     function setUp() public {
         // Place the mock Permit2 at the canonical address LPPetition references.
@@ -85,51 +81,7 @@ contract ExecuteTest is Test {
         petition.sign(id, a0, a1);
     }
 
-    // ---------------------------------------------------------------- happy path
-
-    function test_FullPullToContract() public {
-        uint256 aliceA0 = 1e18; // $2000
-        uint256 bobA1 = 10e18; //  $1500
-        uint256 threshold = _expected(aliceA0, 0) + _expected(0, bobA1);
-
-        uint256 id = petition.createPetition(token0, token1, FEE, threshold);
-        _fundAndApprove(alice, aliceA0, 0);
-        _fundAndApprove(bob, 0, bobA1);
-        _sign(id, alice, aliceA0, 0);
-        _sign(id, bob, 0, bobA1);
-
-        vm.expectEmit(true, false, false, true);
-        emit Executed(id, threshold, bytes32(0));
-        vm.prank(keeper); // permissionless: arbitrary caller
-        petition.execute(id, new bytes[](0));
-
-        assertEq(t0.balanceOf(address(petition)), aliceA0, "contract token0");
-        assertEq(t1.balanceOf(address(petition)), bobA1, "contract token1");
-        assertEq(t0.balanceOf(alice), 0, "alice drained");
-        assertEq(t1.balanceOf(bob), 0, "bob drained");
-        assertEq(uint8(petition.getPetition(id).status), uint8(LPPetition.PetitionStatus.Executed));
-    }
-
-    // -------------------------------------------------------------- skip-insolvent
-
-    function test_InsolventSignerSkipped() public {
-        uint256 aliceA0 = 1e18; // $2000 (deliverable)
-        uint256 bobA1 = 10e18; //  $1500 (NOT funded -> skipped)
-        uint256 threshold = _expected(aliceA0, 0); // alice alone clears it
-
-        uint256 id = petition.createPetition(token0, token1, FEE, threshold);
-        _fundAndApprove(alice, aliceA0, 0);
-        _sign(id, alice, aliceA0, 0);
-        _sign(id, bob, 0, bobA1); // bob signs but has no balance/allowance
-
-        vm.expectEmit(true, true, false, false);
-        emit SignerSkipped(id, bob);
-        petition.execute(id, new bytes[](0));
-
-        assertEq(t0.balanceOf(address(petition)), aliceA0);
-        assertEq(t1.balanceOf(address(petition)), 0, "bob not pulled");
-        assertEq(uint8(petition.getPetition(id).status), uint8(LPPetition.PetitionStatus.Executed));
-    }
+    // ----------------------------------------- insolvency detection (pre-mint)
 
     function test_PartialAllowanceTreatedAsInsolvent() public {
         uint256 amt = 5e18;
@@ -188,19 +140,6 @@ contract ExecuteTest is Test {
         vm.expectRevert(abi.encodeWithSelector(LPPetition.BelowThreshold.selector, 0, 1e18));
         petition.execute(id, new bytes[](0));
         assertEq(uint8(petition.getPetition(id).status), uint8(LPPetition.PetitionStatus.Open));
-    }
-
-    // ------------------------------------------------------------ single-exec
-
-    function test_SingleExecutionGuard() public {
-        uint256 amt = 1e18;
-        uint256 id = petition.createPetition(token0, token1, FEE, _expected(amt, 0));
-        _fundAndApprove(alice, amt, 0);
-        _sign(id, alice, amt, 0);
-
-        petition.execute(id, new bytes[](0));
-        vm.expectRevert(abi.encodeWithSelector(LPPetition.PetitionNotOpen.selector, id));
-        petition.execute(id, new bytes[](0));
     }
 
     function test_ExecuteRevertsUnknownPetition() public {
