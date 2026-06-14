@@ -14,7 +14,7 @@ export async function getPrices(): Promise<PricesResponse> {
     notes: [
       "Prices are fetched server-side only; clients never submit trusted prices.",
       "ETH/USD comes from the Base Sepolia Chainlink feed configured in runtimeConfig.",
-      "SPCX/USD uses official xStocks/Backed endpoints first; CoinGecko/env fallback keeps demos alive when xStocks quote is null/closed.",
+      "SPCX/USD uses official xStocks/Backed endpoints only; an explicit server-side demo fallback can seed the mock oracle when live xStocks quotes are null/closed.",
       "priceUsdE8 is ready to seed the mock AggregatorV3 answer once the mock aggregator deployment is available.",
     ],
   };

@@ -4,8 +4,7 @@ export type PriceSource =
   | "chainlink"
   | "xstocks-price-data"
   | "xstocks-quote-assets"
-  | "coingecko"
-  | "env-fallback"
+  | "xstocks-demo-fallback"
   | "unavailable";
 
 export type PriceQuote = {

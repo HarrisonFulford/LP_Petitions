@@ -84,9 +84,10 @@ Single self-contained environment — **no mainnet fork**. The demo transactions
 - Token `SPCXx` (xStocks / Backed), ERC-20 on Ethereum + Base mainnet: `0x68fa48b1c2fe52b3d776e1953e0e782b5044ce28`
 - Used in the video to show the real pool, and to seed the mock SPCX aggregator with a genuine price.
 
-### xStocks API (public, no auth) — `https://api.xstocks.fi/api/v2`
-- `GET /public/assets/SPCX/price-data` — live indicative SpaceX price (seeds the mock SPCX aggregator + TVL display)
-- `GET /public/proof-of-reserves/SPCX` — PoR (stretch)
+### xStocks / Backed APIs (public, no auth)
+- `GET https://api.backed.fi/api/v2/public/assets/SPCXx/price-data` — official public SPCXx price-data endpoint. Its `quote` may be `null` outside quoting windows.
+- `GET https://api.xstocks.fi/api/v1/quotes/assets/SPCXx` — official xStocks quote metadata fallback. If `bid`/`ask` are present, interpret them as USD cents and use the midpoint.
+- `GET /public/proof-of-reserves/SPCXx` — PoR (stretch; exact public path may need confirmation before implementation).
 
 ### Uniswap v4 — Base Sepolia (from official Uniswap docs + `sepolia.basescan.org`, 2026-06-14)
 | Contract | Address |
@@ -102,7 +103,7 @@ Single self-contained environment — **no mainnet fork**. The demo transactions
 
 ### Chainlink — Base Sepolia
 - **ETH/USD Data Feed:** `0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1` (`EACAggregatorProxy`, verified on `sepolia.basescan.org` 2026-06-14, 8 decimals). Read via `AggregatorV3Interface.latestRoundData` (the load-bearing on-chain read).
-- **Mock SPCX/USD aggregator:** self-deployed `AggregatorV3`-compatible contract, owner/keeper-updated from the xStocks price. Current public API path is Backed/xStocks `https://api.backed.fi/api/v2/public/assets/SPCXx/price-data`; quote can be `null` outside quoting windows, so the backend exposes source diagnostics and server-side fallback price sources for demo continuity.
+- **Mock SPCX/USD aggregator:** self-deployed `AggregatorV3`-compatible contract, owner/keeper-updated from official xStocks/Backed price sources. Current primary public API path is Backed/xStocks `https://api.backed.fi/api/v2/public/assets/SPCXx/price-data`; quote can be `null` outside quoting windows, so the backend exposes source diagnostics and may use an explicit server-side `SPCX_USD_FALLBACK_PRICE` as a demo-only mock oracle seed. Do not silently fall back to unrelated market APIs.
 
 ## 8. Build Order
 
