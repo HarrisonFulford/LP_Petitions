@@ -5,7 +5,7 @@
 - Expanded `implementation_plan.md` with an agent-oriented phase plan, sub-phase checklists, verification gates, clean commit guidance, and parallelization rules.
 - Removed stale references to the deleted `ianimplementation.md` from `contract.md` and `fullstack.md`.
 - Removed the stale `TODO.md` reference from the implementation plan header.
-- Clarified WETH onboarding language: users mint mock SPCX, get faucet ETH, and wrap ETH into real Base Sepolia WETH.
+- Clarified WETH onboarding language: users mint mock NVDA, get faucet ETH, and wrap ETH into real Base Sepolia WETH.
 - No implementation code changes; docs are staged for Ian review before any commit/push.
 
 > Changes to `implementation_plan.md` / `README.md` (and workstream docs) vs. the original plan.
@@ -23,7 +23,7 @@
 
 - **Repo layout:** Solidity workstream lives in a new `contracts/` subdirectory (Foundry), keeping it separate from Ian's full-stack app. Deps installed as git submodules under `contracts/lib/`: forge-std, v4-core (v4.0.0), v4-periphery, permit2, openzeppelin-contracts (v5.6.1), chainlink-brownie-contracts (1.3.0). Toolchain: Foundry v1.7.1, solc 0.8.26, `evm_version = cancun` (required by v4).
 - **Pinned addresses in code:** `contracts/src/config/BaseSepolia.sol` holds the S1-verified addresses as constants (StateView re-checksummed). Single source for the harness + future deploy scripts.
-- **Mocks:** `MockSPCX` (ERC-20, 18 decimals, permissionless `mint` for the demo faucet) and `MockAggregatorV3` (`AggregatorV3Interface`, 8 decimals, owner/keeper-settable answer + timestamp, with `setRoundData` for staleness tests).
+- **Mocks:** `MockNVDA` (ERC-20, 18 decimals, permissionless `mint` for the demo faucet) and `MockAggregatorV3` (`AggregatorV3Interface`, 8 decimals, owner/keeper-settable answer + timestamp, with `setRoundData` for staleness tests).
 - **Fork harness:** `BaseForkTest` creates a Base Sepolia fork from `BASE_SEPOLIA_RPC_URL` and skips cleanly (not fails) when unset. `ForkSanity.t.sol` confirms all pinned contracts have code, the real v4 PoolManager responds, and the real ETH/USD feed reads (8 decimals, positive, in-band).
 - **Status:** `forge build` + `forge test` green (9/9). Fork tests verified passing against live Base Sepolia via the public RPC.
 
@@ -31,7 +31,7 @@
 
 - **`contracts/src/LPPetition.sol`** implements the frozen boundary for the petition lifecycle: `createPetition` (sorted-pair + threshold validation), on-chain `sign` (records/updates the caller's commitment per the S0 decision; no funds move), `getPetition`, `getCommitment`, plus `hypotheticalTvlUsdE18` and an `isThresholdMet` helper. `PetitionCreated` / `Signed` events match `contract.md`.
 - **TVL pricing:** `hypotheticalTvlUsdE18` values each commitment via a per-token Chainlink feed and normalizes to 1e18 using the token's own decimals (`amount * priceE18 / 10^tokenDecimals`). Basic positivity guard only; full staleness/round checks are deferred to C3.
-- **Price-feed registry (addition beyond the cross-team ABI):** owner-set `setPriceFeed(token, feed)` mapping (WETH -> real ETH/USD; mock SPCX -> mock SPCX/USD). This is a deploy/admin concern and does not change Ian's integration surface; `createPetition` requires both tokens to have a feed registered. Deploy scripts (C6) must call `setPriceFeed` before `createPetition`.
+- **Price-feed registry (addition beyond the cross-team ABI):** owner-set `setPriceFeed(token, feed)` mapping (WETH -> real ETH/USD; mock NVDA -> mock NVDA/USD). This is a deploy/admin concern and does not change Ian's integration surface; `createPetition` requires both tokens to have a feed registered. Deploy scripts (C6) must call `setPriceFeed` before `createPetition`.
 - **`execute` is a guarded placeholder** (validates the id, then reverts `ExecuteNotImplemented`) so the ABI stays complete; real Permit2 pull + skip-insolvent (C4) and v4 mint-to-signers (C5) land next. One benign solc "can be restricted to view" warning is expected on this stub until C5.
 - **Helpers for off-chain parity:** `petitionCount`, `signerCount`, `signerAt` for enumerating signers from the executor/frontend.
 - **Status:** `forge build` + `forge test` green (24/24: 15 new `LPPetition.t.sol` covering create/sign/re-sign/getters/TVL/threshold-crossing/invalid-price/execute-stub).
@@ -39,7 +39,7 @@
 ## 06 — C3 Chainlink read hardening
 
 - **Hardened `_priceUsdE18`** (the load-bearing on-chain Chainlink read that gates `execute`): now validates the round — strictly positive answer (`InvalidPrice`), complete round `updatedAt != 0` (`IncompleteRound`), and a configurable max-age staleness check (`StalePrice`).
-- **Per-feed staleness config:** `setPriceFeed(token, feed, maxStaleness)` (signature extended; admin-only, not part of the cross-team ABI) + public `priceStaleness` mapping; `PriceFeedSet` now carries the staleness. `maxStaleness == 0` disables the time-based check (positivity + completeness still enforced) — an escape hatch for testnet feeds that update infrequently and for the keeper-driven mock SPCX aggregator. C6 deploy must pass a sensible staleness (or 0) per feed.
+- **Per-feed staleness config:** `setPriceFeed(token, feed, maxStaleness)` (signature extended; admin-only, not part of the cross-team ABI) + public `priceStaleness` mapping; `PriceFeedSet` now carries the staleness. `maxStaleness == 0` disables the time-based check (positivity + completeness still enforced) — an escape hatch for testnet feeds that update infrequently and for the keeper-driven mock NVDA aggregator. C6 deploy must pass a sensible staleness (or 0) per feed.
 - **Tests:** new `test/ChainlinkRead.t.sol` (8) — valid read; zero & negative rejected; incomplete round rejected; stale rejected; fresh-within-window accepted; staleness-disabled allows old answers; below-threshold vs at-threshold gating via `isThresholdMet`.
 - **Lint:** the `block.timestamp` staleness comparison is the intended pattern (hour-scale window >> validator drift); suppressed with a justified `forge-lint` disable.
 - **Status:** `forge build` + `forge test` green (32/32). The only remaining warning is the intentional `execute` stub ("can be restricted to view"), gone once C5 lands.
@@ -67,7 +67,7 @@
 ## 09 — C6 deploy scripts + v4 address root-cause fix
 
 - **Root-cause fix (supersedes C5's `SETTLE_PAIR=0x11` workaround).** `BaseSepolia.sol` was corrected to the official Uniswap v4 set (PoolManager `0x05E73354…`, PositionManager `0x4B2C77d2…`, UniversalRouter `0x492E6456…`), but `LPPetition.sol` still hardcoded the *old* PositionManager (`0xcDbe7b1e…`) — a second, older v4 deployment that exists on Base Sepolia and uses legacy (gapped) action numbering. That mismatch, not v4-periphery itself, was why settle needed `0x11`. Fix: `LPPetition` now sources Permit2/PositionManager/UniversalRouter from the `BaseSepolia` library (single source of truth) and uses standard `Actions` (`SETTLE_PAIR=0x0d`). Both new-set addresses re-verified on BaseScan (PoolManager / "Uniswap v4 Positions NFT"); fork tests pass against the canonical PositionManager with `0x0d`.
-- **C6 — `script/Deploy.s.sol`:** deploys `MockSPCX` + mock SPCX/USD aggregator (seed $150, 8 dec) + `LPPetition`; registers feeds (WETH→real ETH/USD, SPCX→mock, 24h staleness each); opens a demo petition (fee 3000, $5,000 threshold) on the sorted SPCX/WETH pair; mints 1,000 SPCX to the deployer + optional `DEMO_WALLETS`; prints an address book and writes `deployments/base-sepolia.json` (gitignored output dir kept via `.gitkeep`; `foundry.toml` grants write to `./deployments`). WETH is the real Base Sepolia WETH9 — not minted; demo wallets wrap testnet ETH via the app faucet.
+- **C6 — `script/Deploy.s.sol`:** deploys `MockNVDA` + mock NVDA/USD aggregator (seed $150, 8 dec) + `LPPetition`; registers feeds (WETH→real ETH/USD, NVDA→mock, 24h staleness each); opens a demo petition (fee 3000, $5,000 threshold) on the sorted NVDA/WETH pair; mints 1,000 NVDA to the deployer + optional `DEMO_WALLETS`; prints an address book and writes `deployments/base-sepolia.json` (gitignored output dir kept via `.gitkeep`; `foundry.toml` grants write to `./deployments`). WETH is the real Base Sepolia WETH9 — not minted; demo wallets wrap testnet ETH via the app faucet.
 - **Validated by simulation** (`forge script ... --rpc-url` without `--broadcast`, throwaway key): script body runs, address book is internally consistent (LPPetition uses the same v4 set it prints). Real broadcast (`--broadcast` + funded `PRIVATE_KEY`) is the operator's step.
 - **Status:** `forge build` zero warnings; `forge test` 39/39 green (6 fork tests against live Base Sepolia).
 

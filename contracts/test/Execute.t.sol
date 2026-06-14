@@ -3,7 +3,7 @@ pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
 import {LPPetition} from "../src/LPPetition.sol";
-import {MockSPCX} from "../src/mocks/MockSPCX.sol";
+import {MockNVDA} from "../src/mocks/MockNVDA.sol";
 import {MockAggregatorV3} from "../src/mocks/MockAggregatorV3.sol";
 import {MockPermit2} from "./mocks/MockPermit2.sol";
 
@@ -14,8 +14,8 @@ contract ExecuteTest is Test {
     LPPetition internal petition;
     MockPermit2 internal permit2;
 
-    MockSPCX internal t0;
-    MockSPCX internal t1;
+    MockNVDA internal t0;
+    MockNVDA internal t1;
     address internal token0;
     address internal token1;
     int256 internal price0E8;
@@ -36,8 +36,8 @@ contract ExecuteTest is Test {
 
         petition = new LPPetition();
 
-        MockSPCX tokenA = new MockSPCX();
-        MockSPCX tokenB = new MockSPCX();
+        MockNVDA tokenA = new MockNVDA();
+        MockNVDA tokenB = new MockNVDA();
         MockAggregatorV3 feedA = new MockAggregatorV3(8, "A/USD", PRICE_A);
         MockAggregatorV3 feedB = new MockAggregatorV3(8, "B/USD", PRICE_B);
         petition.setPriceFeed(address(tokenA), feedA, 1 days);

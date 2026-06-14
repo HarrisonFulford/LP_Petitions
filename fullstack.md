@@ -6,9 +6,9 @@
 
 ## Locked decisions (context)
 
-Base Sepolia · Uniswap v4 · pair **mock SPCX / WETH** · **full-range** positions · **Option B** (each signer owns their own position NFT — the proof panel shows real positions, not vault shares) · **shared threshold** · **skip-insolvent** at execute · Chainlink **ETH/USD Data Feed** + **mock SPCX/USD aggregator** · backend is a trigger + calldata builder, never custodies funds.
+Base Sepolia · Uniswap v4 · pair **mock NVDA / WETH** · **full-range** positions · **Option B** (each signer owns their own position NFT — the proof panel shows real positions, not vault shares) · **shared threshold** · **skip-insolvent** at execute · Chainlink **ETH/USD Data Feed** + **mock NVDA/USD aggregator** · backend is a trigger + calldata builder, never custodies funds.
 
-**Must ship live for finalist judging:** publicly hosted site judges can use on the spot. **All-Vercel hosting (Vercel Pro):** Next.js frontend + API routes, **Vercel Postgres/KV** for storage (serverless filesystem is ephemeral), and **auto-execute without a separate worker** via (a) reactive execution on commit using `after()`/`waitUntil` and (b) a per-minute **Vercel Cron** sweep (Pro plan) as the safety net for price-driven crossings. Plus onboarding so an empty wallet can participate: mint mock SPCX, use a Base Sepolia ETH faucet for gas, and wrap test ETH into WETH.
+**Must ship live for finalist judging:** publicly hosted site judges can use on the spot. **All-Vercel hosting (Vercel Pro):** Next.js frontend + API routes, **Vercel Postgres/KV** for storage (serverless filesystem is ephemeral), and **auto-execute without a separate worker** via (a) reactive execution on commit using `after()`/`waitUntil` and (b) a per-minute **Vercel Cron** sweep (Pro plan) as the safety net for price-driven crossings. Plus onboarding so an empty wallet can participate: mint mock NVDA, use a Base Sepolia ETH faucet for gas, and wrap test ETH into WETH.
 
 ## Shared / bottleneck tasks (ALSO in `contract.md` — do these first, together)
 
@@ -16,7 +16,7 @@ These block both workstreams. Settle before parallel work.
 
 - **S0 — Lock the interface boundary (Phase 0, both present).** Freeze the `LPPetition` ABI (below), the commitment EIP-712 typed-data + Permit2 permit shape, the event schema, and the runtime config (addresses + chainId). Both sides build against the frozen version; later changes require a sync. Mock the contract behind this ABI so frontend/backend aren't blocked on Harrison.
 - **S1 — Pin addresses (Harrison leads; Ian records in app config).** Base Sepolia v4 set + Chainlink ETH/USD feed proxy → one `RuntimeConfig`.
-- **S2 — Deploy to Base Sepolia + mint demo balances (Harrison runs; Ian consumes addresses).** Wire the app to the deployed `LPPetition`, mock SPCX, mock aggregator.
+- **S2 — Deploy to Base Sepolia + mint demo balances (Harrison runs; Ian consumes addresses).** Wire the app to the deployed `LPPetition`, mock NVDA, mock aggregator.
 - **S3 — End-to-end integration + demo + submission (shared).** One real `execute()` on Base Sepolia; record tx hashes; finalize README, demo video, and Uniswap Developer Feedback Form.
 
 ## Owned tasks (Ian)
@@ -34,7 +34,7 @@ One commit per sub-task; `npm run typecheck` + browser smoke before each commit.
 - Build the EIP-712 commitment typed data + Permit2 permit to match Harrison's schema exactly (S0). Verify the connected-wallet signature server-side before storing.
 
 ### F4 — Price fetch (display + seed mock aggregator)
-- Fetch ETH/USD (Chainlink) and SpaceX price. xStocks public price data now routes through Backed's API (`https://api.backed.fi/api/v2/public/assets/SPCXx/price-data`), with quote-assets/CoinGecko/server-env fallback when the official quote is null/closed. Feed the SpaceX price to the keeper that updates the mock SPCX/USD aggregator. Never trust client-supplied prices.
+- Fetch ETH/USD (Chainlink) and NVDAx price. NVDA/USD must use official xStocks/Backed public sources only: Backed price-data (`https://api.backed.fi/api/v2/public/assets/NVDAx/price-data`) first, then xStocks quote metadata (`https://api.xstocks.fi/api/v1/quotes/assets/NVDAx`) if price-data is null/closed. For demo continuity, an explicit server-side `NVDA_USD_FALLBACK_PRICE` may seed the mock oracle, but it must be labeled as demo-only fallback — not live xStocks/Chainlink market data. Feed the NVDAx price to the keeper that updates the mock NVDA/USD aggregator. Never trust client-supplied prices.
 
 ### F5 — TVL progress + threshold
 - Compute live "hypothetical TVL" from stored commitments × prices; render the progress bar; mark when the shared threshold is crossed. (Contract is the final authority.)
@@ -48,12 +48,12 @@ One commit per sub-task; `npm run typecheck` + browser smoke before each commit.
 
 ### F7 — Frontend screens
 1. **List** — petitions with target, progress, status.
-2. **Create** — pair (SPCX/WETH), target TVL, fee tier.
-3. **Detail** — Chainlink price card, contribution form (SPCX + WETH), Permit2 approval/sign state, live progress, **auto-executing** → executed states (no user button needed; it fires itself).
+2. **Create** — pair (NVDA/WETH), target TVL, fee tier.
+3. **Detail** — Chainlink price card, contribution form (NVDA + WETH), Permit2 approval/sign state, live progress, **auto-executing** → executed states (no user button needed; it fires itself).
 4. **Executed proof** — explorer tx link + **each signer's own v4 position** (Option B), and a one-line Chainlink/Uniswap sponsor summary.
 
 ### F8 — Judge onboarding / faucet
-- Visible onboarding controls so an empty wallet can mint mock SPCX, open a Base Sepolia ETH faucet for gas, and wrap test ETH into WETH.
+- Visible onboarding controls so an empty wallet can mint mock NVDA, open a Base Sepolia ETH faucet for gas, and wrap test ETH into WETH.
 
 ### F9 — Deploy & make live (finalist requirement) — all on Vercel
 - **One platform: Vercel (Pro).** Frontend + API routes + Vercel Cron + Vercel Postgres/KV. No separate worker host.
@@ -92,7 +92,7 @@ event PositionMinted(uint256 indexed id, address indexed signer, uint256 positio
 ## Definition of done (full-stack)
 - **Live public URL** (Vercel) is up and active for finalist judging, backed by a hosted DB.
 - Create/list petitions; commitments persist + stay ordered across refresh and deploys.
-- Wallet connect → mint mock SPCX → wrap faucet ETH into WETH → Permit2 approve → sign commitment works on Base Sepolia.
+- Wallet connect → mint mock NVDA → wrap faucet ETH into WETH → Permit2 approve → sign commitment works on Base Sepolia.
 - Progress bar reflects Chainlink-priced TVL; **auto-execute (reactive + Vercel Cron) fires at threshold** with no manual click; proof panel shows the explorer link + each signer's position.
 - A fresh wallet can complete the full flow on the live site unaided.
 - No executor key exposed client-side; all secrets in hosted env.

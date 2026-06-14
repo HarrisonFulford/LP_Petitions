@@ -4,8 +4,7 @@ export type PriceSource =
   | "chainlink"
   | "xstocks-price-data"
   | "xstocks-quote-assets"
-  | "coingecko"
-  | "env-fallback"
+  | "xstocks-demo-fallback"
   | "unavailable";
 
 export type PriceQuote = {
@@ -25,6 +24,6 @@ export type PricesResponse = {
   chainId: number;
   fetchedAt: string;
   ethUsd: PriceQuote;
-  spcxUsd: PriceQuote;
+  nvdaUsd: PriceQuote;
   notes: string[];
 };

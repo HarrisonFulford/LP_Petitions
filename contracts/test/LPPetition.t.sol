@@ -3,14 +3,14 @@ pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
 import {LPPetition} from "../src/LPPetition.sol";
-import {MockSPCX} from "../src/mocks/MockSPCX.sol";
+import {MockNVDA} from "../src/mocks/MockNVDA.sol";
 import {MockAggregatorV3} from "../src/mocks/MockAggregatorV3.sol";
 
 contract LPPetitionTest is Test {
     LPPetition internal petition;
 
-    MockSPCX internal tokenA;
-    MockSPCX internal tokenB;
+    MockNVDA internal tokenA;
+    MockNVDA internal tokenB;
     MockAggregatorV3 internal feedA;
     MockAggregatorV3 internal feedB;
 
@@ -22,7 +22,7 @@ contract LPPetitionTest is Test {
 
     uint24 internal constant FEE = 3000;
     int256 internal constant PRICE_A = 2000e8; // $2000 (ETH-like)
-    int256 internal constant PRICE_B = 150e8; //  $150  (SPCX-like)
+    int256 internal constant PRICE_B = 150e8; //  $150  (NVDA-like)
 
     address internal alice = makeAddr("alice");
     address internal bob = makeAddr("bob");
@@ -33,8 +33,8 @@ contract LPPetitionTest is Test {
     function setUp() public {
         petition = new LPPetition();
 
-        tokenA = new MockSPCX();
-        tokenB = new MockSPCX();
+        tokenA = new MockNVDA();
+        tokenB = new MockNVDA();
         feedA = new MockAggregatorV3(8, "A/USD", PRICE_A);
         feedB = new MockAggregatorV3(8, "B/USD", PRICE_B);
 
@@ -94,7 +94,7 @@ contract LPPetitionTest is Test {
     }
 
     function test_CreateRevertsMissingFeed() public {
-        MockSPCX orphan = new MockSPCX();
+        MockNVDA orphan = new MockNVDA();
         (address t0, address t1) =
             address(orphan) < token0 ? (address(orphan), token0) : (token0, address(orphan));
         address missing = address(orphan);

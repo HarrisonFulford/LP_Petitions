@@ -3,7 +3,7 @@ pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
 import {LPPetition} from "../src/LPPetition.sol";
-import {MockSPCX} from "../src/mocks/MockSPCX.sol";
+import {MockNVDA} from "../src/mocks/MockNVDA.sol";
 import {MockAggregatorV3} from "../src/mocks/MockAggregatorV3.sol";
 
 /// @notice C3 — validates the on-chain Chainlink read that gates execution:
@@ -27,8 +27,8 @@ contract ChainlinkReadTest is Test {
     function setUp() public {
         petition = new LPPetition();
 
-        MockSPCX tokenA = new MockSPCX();
-        MockSPCX tokenB = new MockSPCX();
+        MockNVDA tokenA = new MockNVDA();
+        MockNVDA tokenB = new MockNVDA();
         (token0, token1) =
             address(tokenA) < address(tokenB) ? (address(tokenA), address(tokenB)) : (address(tokenB), address(tokenA));
 

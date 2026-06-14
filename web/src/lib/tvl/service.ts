@@ -23,11 +23,11 @@ function normalizeSymbol(symbol: string) {
 function priceForSymbol(symbol: string, prices: Awaited<ReturnType<typeof getPrices>>) {
   const normalized = normalizeSymbol(symbol);
   if (normalized === "WETH" || normalized === "ETH") return prices.ethUsd;
-  if (normalized === "SPCX" || normalized === "SPCXX" || normalized === "SPCXX") {
-    return prices.spcxUsd;
+  if (normalized === "NVDA" || normalized === "NVDAX") {
+    return prices.nvdaUsd;
   }
   throw new TvlUnavailableError(`No price mapping configured for ${symbol}`, [
-    "F5a only supports the MVP SPCX/WETH pair.",
+    "F5a only supports the MVP NVDA/WETH pair.",
   ]);
 }
 
@@ -109,7 +109,7 @@ export async function computePetitionTvl(detail: PetitionDetail): Promise<Petiti
     },
     commitments: contributionRows,
     notes: [
-      "F5a assumes both MVP tokens use 18 decimals: mock SPCX and WETH.",
+      "F5a assumes both MVP tokens use 18 decimals: mock NVDA and WETH.",
       "This backend/UI TVL is a mirror for display and trigger heuristics; the contract remains the final authority.",
       "F6 can reuse this output to decide when to attempt execute(), but execute() must re-check TVL on-chain.",
     ],
