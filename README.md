@@ -11,8 +11,6 @@ Today, there is no clean way to say:
 
 This makes liquidity formation hard for new, small, or nonexistent pools without centralized providers jumpstarting it with a huge volume at once.
 
-Stats: **TBD** 
-
 ## The Solution 
 
 LP Petitions lets users sign conditional LP commitments. A user chooses a token pair, sets how much liquidity they are willing to provide, and picks a minimum TVL threshold. Their liquidity only activates once enough compatible commitments exist. 
